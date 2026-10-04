@@ -1,31 +1,26 @@
-# Live NVIDIA GPU Dashboard
+# GPU Monitor
 
-A local Windows dashboard that charts NVIDIA GPU utilization, VRAM usage, core temperature, and power draw. Multiple GPUs appear separately, identified by their GPU UUID.
+Native C#/.NET Windows desktop monitor for NVIDIA GPUs. Automatically detects all cards on every launch and refresh, so adding a third GPU generates its panel and filter option without configuration.
 
-## Requirements
+## Install
 
-- Windows with Python 3.10 or newer
-- NVIDIA drivers providing `nvidia-smi` on PATH
-- A web browser
+Download **GPU-Monitor-Setup.exe** from the latest successful [Windows application workflow](https://github.com/walladanger/GPU-Monitoring/actions/workflows/windows-build.yml), then run it. The installer includes .NET, creates a Start menu shortcut, and supports removal through Windows Installed Apps. Administrator rights are not required. Packages are unsigned.
 
-No third-party Python packages or external web assets are required.
+Alternatively extract the entire Windows ZIP and launch `GpuMonitor.exe`, or use `Install.cmd` for a per-user script installation. NVIDIA drivers providing `nvidia-smi` are required. Close the app, including its tray icon, before updating.
 
-## Run
+## Features
 
-Double-click **Start GPU Dashboard.cmd**, or run:
+- GPU panels and filter options reflect detected NVIDIA devices, with no fixed card count
+- UUID identity keeps history attached to the same GPU after index changes
+- Utilization, VRAM, core temperature, power, supported fan and clock readings
+- Optional unsupported sensors are omitted
+- Adjustable refresh and history windows, CSV export, system tray and saved preferences
+- Query timeouts, stale-reading indication and automatic recovery
 
-```powershell
-python gpu_dashboard.py
-```
+History is session-only and limited to 30 minutes. GPU hotspot and VRAM junction temperatures, AMD/Intel collectors, persistent history, alerts and automatic updates are not included in this version. Monitoring does not change GPU settings.
 
-Open http://127.0.0.1:8765/. The script also opens the address in your default browser. Keep the terminal open; press Ctrl+C to stop the server.
+## Source and build
 
-Readings refresh approximately every two seconds. Select a 5-, 15-, or 30-minute chart window. Up to 900 samples are retained in memory; history resets when the server stops. The server listens only on the local loopback interface.
+The native application is under [src/GpuMonitor](src/GpuMonitor). See its README for build and verification commands. The Windows workflow produces the runtime-bundled ZIP and conventional installer.
 
-## Limitations
-
-- Temperature is GPU core temperature, not hotspot or memory junction temperature.
-- Unsupported readings appear as `N/A`.
-- Only one dashboard server can use port 8765 at a time.
-- This version uses Windows process flags and is intended for Windows.
-- Monitoring is read-only: no fan, clock, or power settings are changed.
+The original Python/browser prototype remains in `gpu_dashboard.py` with `Start GPU Dashboard.cmd`. It can still be run using Python and viewed at http://127.0.0.1:8765/.

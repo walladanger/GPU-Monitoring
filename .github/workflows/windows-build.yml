@@ -1,0 +1,44 @@
+name: Windows application
+on:
+  push:
+    branches: [main]
+    paths: ['src/GpuMonitor/**', '.github/workflows/windows-build.yml']
+  pull_request:
+    paths: ['src/GpuMonitor/**', '.github/workflows/windows-build.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build
+        run: dotnet build src/GpuMonitor/GpuMonitor.csproj -c Release
+      - name: Verify discovery and native panel behavior
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows/GpuMonitor.exe
+          $process = Start-Process $exe -ArgumentList '--self-test' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Application checks failed' }
+          Get-Content (Join-Path (Split-Path $exe) 'self-test-result.txt')
+      - name: Publish runtime-bundled ZIP
+        shell: pwsh
+        run: ./src/GpuMonitor/packaging/Build-Package.ps1
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $compiler)) { throw 'Inno Setup is missing from the Windows runner' }
+          & $compiler src/GpuMonitor/packaging/GpuMonitor.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GPU-Monitor-Windows-x64
+          path: |
+            src/GpuMonitor/GPU-Monitor-Windows-x64.zip
+            src/GpuMonitor/artifacts/GPU-Monitor-Setup.exe
+          if-no-files-found: error
