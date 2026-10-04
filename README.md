@@ -8,6 +8,10 @@ Download **GPU-Monitor-Setup.exe** from the latest successful [Windows applicati
 
 Alternatively extract the entire Windows ZIP and launch `GpuMonitor.exe`, or use `Install.cmd` for a per-user script installation. NVIDIA drivers providing `nvidia-smi` are required. Close the app, including its tray icon, before updating.
 
+## Quick launch with desktop shortcut
+
+Double-click `Run GPU Monitor.cmd` (or run `Run-GPU-Monitor.ps1`). It starts the app and creates a **GPU Monitor** shortcut on your desktop. It prefers the installed native app, then a `GpuMonitor.exe` beside the script or a local build, and otherwise falls back to the Python dashboard. Use `-ShortcutOnly` to create the shortcut without launching, or `-NoShortcut` to skip it.
+
 ## Features
 
 - GPU panels and filter options reflect detected NVIDIA devices, with no fixed card count
