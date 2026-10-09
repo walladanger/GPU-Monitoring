@@ -24,11 +24,21 @@ $candidates = @(
 $exe = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 
 function Find-Python {
+    # Skip the Microsoft Store "python.exe" stub in WindowsApps; it opens the Store instead of running Python.
     foreach ($name in 'pythonw.exe', 'python.exe') {
-        $cmd = Get-Command $name -ErrorAction SilentlyContinue
+        $cmd = Get-Command $name -All -ErrorAction SilentlyContinue |
+            Where-Object { $_.Source -notmatch '\\WindowsApps\\' } | Select-Object -First 1
         if ($cmd) { return $cmd.Source }
     }
     $null
+}
+
+$python = $null
+if (-not $exe) {
+    $python = Find-Python
+    if (-not $python) {
+        throw 'GpuMonitor.exe was not found and Python is not installed. Install GPU-Monitor-Setup.exe from the latest Windows workflow run, or install Python. No desktop shortcut was created.'
+    }
 }
 
 if (-not $NoShortcut) {
@@ -61,10 +71,6 @@ if ($exe) {
     return
 }
 
-$python = Find-Python
-if (-not $python) {
-    throw 'GpuMonitor.exe was not found and Python is not installed. Install GPU-Monitor-Setup.exe from the latest Windows workflow run, or install Python.'
-}
 Start-Process -FilePath $python -ArgumentList "`"$(Join-Path $root 'gpu_dashboard.py')`"" -WorkingDirectory $root -WindowStyle Hidden
 Start-Sleep -Seconds 2
 Start-Process 'http://127.0.0.1:8765/'
