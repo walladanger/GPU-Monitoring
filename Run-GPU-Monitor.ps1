@@ -4,7 +4,7 @@
 .DESCRIPTION
   Uses the first native GpuMonitor.exe found (installed copy, next to this script,
   or a local build). If none exists, falls back to the Python dashboard
-  (gpu_dashboard.py) and opens http://127.0.0.1:8765/.
+  (gpu_dashboard.py), which opens http://127.0.0.1:8765/ itself.
   The desktop shortcut is created on first run and refreshed on later runs.
 .PARAMETER ShortcutOnly
   Create/update the desktop shortcut without launching the app.
@@ -23,12 +23,29 @@ $candidates = @(
 )
 $exe = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 
+function Test-Python($path) {
+    # A real interpreter exits 0; the Microsoft Store "python.exe" stub (not installed) does not.
+    try { & $path -c 'import sys' 2>$null | Out-Null; return ($LASTEXITCODE -eq 0) } catch { return $false }
+}
+
+function Get-WindowedPython($path) {
+    # pythonw.exe runs without a console window; use it when it sits beside the interpreter.
+    $w = Join-Path (Split-Path -Parent $path) 'pythonw.exe'
+    if (Test-Path -LiteralPath $w) { $w } else { $path }
+}
+
 function Find-Python {
-    # Skip the Microsoft Store "python.exe" stub in WindowsApps; it opens the Store instead of running Python.
-    foreach ($name in 'pythonw.exe', 'python.exe') {
-        $cmd = Get-Command $name -All -ErrorAction SilentlyContinue |
-            Where-Object { $_.Source -notmatch '\\WindowsApps\\' } | Select-Object -First 1
-        if ($cmd) { return $cmd.Source }
+    foreach ($cmd in @(Get-Command python.exe -All -ErrorAction SilentlyContinue)) {
+        if (Test-Python $cmd.Source) { return Get-WindowedPython $cmd.Source }
+    }
+    # python.org installs may provide only the py launcher on PATH; ask it for the real interpreter.
+    $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
+    if ($launcher) {
+        try {
+            $out = @(& $launcher.Source -3 -c 'import sys; print(sys.executable)' 2>$null)
+            $real = $out | Select-Object -First 1
+            if ($LASTEXITCODE -eq 0 -and $real -and (Test-Path -LiteralPath $real)) { return Get-WindowedPython $real }
+        } catch { }
     }
     $null
 }
@@ -72,5 +89,3 @@ if ($exe) {
 }
 
 Start-Process -FilePath $python -ArgumentList "`"$(Join-Path $root 'gpu_dashboard.py')`"" -WorkingDirectory $root -WindowStyle Hidden
-Start-Sleep -Seconds 2
-Start-Process 'http://127.0.0.1:8765/'
