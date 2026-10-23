@@ -47,6 +47,7 @@ jobs:
           if (-not $process.WaitForExit(20000)) { $process.Kill(); throw 'Backend shutdown timed out' }
           if ($process.ExitCode -ne 0) { throw 'Backend collection failed' }
           $sources = Get-Content (Join-Path $output 'telemetry.json') -Raw | ConvertFrom-Json
+          $sources | Select-Object Source, Health, Error | ConvertTo-Json
           $system = $sources | Where-Object Source -eq 'windows-system'
           if ($system.Health -ne 'Live') { throw 'Windows system collector is not live' }
           $ram = $system.Current.Samples | Where-Object MetricKey -eq 'ram.total'
