@@ -42,6 +42,14 @@ internal static class TelemetrySessionChecks
         try { session.Apply(invalid, time.AddSeconds(32)); } catch (ArgumentException) { rejected = true; }
         check(rejected && ReferenceEquals(previous, session.Current) && session.History("GPU-B", "utilization.gpu").Count == 4,
             "Invalid duplicate series cannot partially change active histories");
+        var badCapability = provider.Batch with { Capabilities = [new(provider.Batch.Devices[0], "unknown.metric", MetricAvailability.Available)] };
+        rejected = false;
+        try { session.Apply(badCapability, time.AddSeconds(32)); } catch (ArgumentException) { rejected = true; }
+        check(rejected && ReferenceEquals(previous, session.Current), "Unknown capability cannot overwrite a valid snapshot");
+        var badEvent = provider.Batch with { Events = [new("another-source", "event", time, "activity")] };
+        rejected = false;
+        try { session.Apply(badEvent, time.AddSeconds(32)); } catch (ArgumentException) { rejected = true; }
+        check(rejected && ReferenceEquals(previous, session.Current), "Cross-provider events cannot corrupt source attribution");
         using var stop = new CancellationTokenSource(); stop.Cancel();
         bool cancelled = false;
         try { await session.RefreshAsync(stop.Token); } catch (OperationCanceledException) { cancelled = true; }
@@ -58,6 +66,12 @@ internal static class TelemetrySessionChecks
         await session.RefreshAsync(CancellationToken.None);
         check(session.Health == ProviderHealth.Live && session.Current!.Devices.Count == 0 && session.History("GPU-B", "utilization.gpu").Count == 0,
             "Successful empty snapshot clears devices and histories");
+        var mutableDevices = Batch(33, "C").Devices.ToList();
+        var mutableSamples = Batch(33, "C").Samples.ToList();
+        session.Apply(new(mutableDevices, [], mutableSamples, []), time.AddSeconds(33));
+        mutableDevices.Clear(); mutableSamples.Clear();
+        check(session.Current!.Devices.Count == 1 && session.Current.Samples.Count == 8,
+            "Provider mutation cannot change a published snapshot");
     }
 
     private sealed class FixtureProvider : ITelemetryProvider
