@@ -26,6 +26,9 @@ internal static class OverviewChecks
         void ApplyCase()
         {
             var (count, width) = cases[index]; window.Width = width;
+            // The runner's desktop can be smaller than the reference. Lay out a real
+            // WPF viewport at the requested dimensions, independently of HWND limits.
+            window.VerificationRoot.Width = width; window.VerificationRoot.Height = 1024;
             for (int tick = 0; tick <= 30; tick++)
             {
                 string rows = string.Join('\n', Enumerable.Range(0, count).Select(gpu =>
@@ -40,10 +43,11 @@ internal static class OverviewChecks
             try
             {
                 window.UpdateLayout();
-                var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
-                bitmap.Render(window);
+                var bitmap = Capture(window.VerificationRoot);
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
                 var (count, width) = cases[index];
+                if (bitmap.PixelWidth != width || bitmap.PixelHeight != 1024)
+                    throw new InvalidOperationException("Fixture viewport dimensions do not match the requested reference size.");
                 using (var stream = File.Create(Path.Combine(output, $"fixture-{count}-gpus-{width}.png"))) encoder.Save(stream);
                 // Inspect chart interiors, excluding all card headings and numeric labels.
                 if (count > 0)
@@ -52,8 +56,7 @@ internal static class OverviewChecks
                     for (int chartIndex = 0; chartIndex < 2; chartIndex++)
                     {
                         var plot = plots[chartIndex];
-                        var plotBitmap = new RenderTargetBitmap((int)plot.ActualWidth, (int)plot.ActualHeight, 96, 96, PixelFormats.Pbgra32);
-                        plotBitmap.Render(plot);
+                        var plotBitmap = Capture(plot);
                         int stride = plotBitmap.PixelWidth * 4; var pixels = new byte[stride * plotBitmap.PixelHeight]; plotBitmap.CopyPixels(pixels, stride, 0);
                         int colored = 0;
                         for (int y = 16; y < plotBitmap.PixelHeight - 32; y++)
@@ -81,5 +84,15 @@ internal static class OverviewChecks
         app.DispatcherUnhandledException += (_, e) => { e.Handled = true; Fail(e.Exception); };
         window.Loaded += (_, _) => { try { ApplyCase(); timer.Start(); } catch (Exception error) { Fail(error); } };
         try { app.Run(window); } catch (Exception error) { Fail(error); }
+    }
+
+    private static RenderTargetBitmap Capture(FrameworkElement view)
+    {
+        var bitmap = new RenderTargetBitmap((int)view.ActualWidth, (int)view.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+        var drawing = new DrawingVisual();
+        using (var context = drawing.RenderOpen())
+            context.DrawRectangle(new VisualBrush(view), null, new Rect(0, 0, view.ActualWidth, view.ActualHeight));
+        // VisualBrush captures in local coordinates instead of including layout offsets.
+        bitmap.Render(drawing); return bitmap;
     }
 }

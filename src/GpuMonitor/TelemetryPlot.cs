@@ -45,6 +45,7 @@ public sealed class TelemetryPlot : Grid
         };
         chart = new CartesianChart
         {
+            Background = new SolidColorBrush(Color.FromRgb(23, 30, 39)),
             XAxes = new[] { timeAxis }, YAxes = new[] { valueAxis }, Series = series,
             AnimationsSpeed = TimeSpan.Zero, LegendPosition = LegendPosition.Hidden,
             TooltipPosition = TooltipPosition.Hidden,

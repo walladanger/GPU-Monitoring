@@ -88,7 +88,7 @@ public sealed class OverviewWindow : Window
         actions.Children.Add(OverviewTheme.Command("□", () => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized, "Maximize or restore"));
         actions.Children.Add(OverviewTheme.Command("×", Close, "Close")); DockPanel.SetDock(actions, Dock.Right); bar.Children.Add(actions);
         var title = new StackPanel { Margin = new(22, 12, 0, 8) }; title.Children.Add(OverviewTheme.Text("GPU Monitor", 20));
-        title.Children.Add(OverviewTheme.Text("Real-time GPU monitoring", 13, OverviewTheme.Muted));
+        title.Children.Add(OverviewTheme.Text(savePreferences ? "Real-time GPU monitoring" : "Fixture preview · synthetic data", 13, OverviewTheme.Muted));
         title.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2) WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; else DragMove(); };
         bar.Children.Add(title); return bar;
     }
@@ -178,6 +178,7 @@ public sealed class OverviewWindow : Window
         health.Text = paused ? "● Paused" : session.Health switch { ProviderHealth.Live => "● Connected", ProviderHealth.Stale => "● Telemetry unavailable", _ => "● Discovering…" };
         health.Foreground = paused || session.Health == ProviderHealth.Stale ? OverviewTheme.Brush("#F9B84D") : OverviewTheme.Green;
         health.ToolTip = session.Error ?? $"Last update: {session.LastSuccess?.ToLocalTime():HH:mm:ss}";
+        if (!savePreferences) { health.Text = "● Test fixture"; health.ToolTip = "Synthetic verification data; no hardware is polled."; }
         empty.Visibility = readings.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         empty.Text = session.Health == ProviderHealth.Starting ? "Discovering NVIDIA GPUs…" : session.Health == ProviderHealth.Stale ? "NVIDIA telemetry unavailable. Check the driver; retrying automatically." : "No NVIDIA GPUs detected.";
         summary.Text = collapsed ? $"{readings.Length} GPUs" : $"{readings.Length} GPUs detected\nLast update  {session.LastSuccess?.ToLocalTime():HH:mm:ss}\n{(paused ? "Paused" : session.Health.ToString())}";
@@ -199,4 +200,5 @@ public sealed class OverviewWindow : Window
         if (cards.Count != expected || comparison.SeriesCount != expected) throw new InvalidOperationException("Overview must show exactly the detected GPU count.");
     }
     internal IReadOnlyList<TelemetryPlot> VerifyPlots => cards.Values.SelectMany(c => c.Plots).ToArray();
+    internal FrameworkElement VerificationRoot => (FrameworkElement)Content;
 }
