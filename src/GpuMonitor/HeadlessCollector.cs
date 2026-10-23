@@ -15,8 +15,9 @@ public static class HeadlessCollector
         if (durationSeconds is < 1 or > 86400) throw new ArgumentOutOfRangeException(nameof(durationSeconds));
         if (intervalSeconds is < 1 or > 10) throw new ArgumentOutOfRangeException(nameof(intervalSeconds));
         Directory.CreateDirectory(directory);
+        using var disks = new DiskCollector();
         var engine = new TelemetryEngine([new NvidiaCollector(), new WindowsSystemCollector(),
-            new NetworkCollector(), new VolumeCollector()]);
+            new NetworkCollector(), new VolumeCollector(), disks, new ProcessCollector(), new NvidiaProcessCollector()]);
         using var duration = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         duration.CancelAfter(TimeSpan.FromSeconds(durationSeconds));
         try { await engine.RunAsync(TimeSpan.FromSeconds(intervalSeconds), duration.Token); }

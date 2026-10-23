@@ -6,6 +6,11 @@ internal static class SystemCollectorChecks
 {
     public static async Task Run(Action<bool, string> check)
     {
+        check(DiskCollector.BusyFromIdle(75) == 25 && DiskCollector.BusyFromIdle(null) == null && DiskCollector.BusyFromIdle(101) == null,
+            "Physical disk busy time uses valid idle percentage and preserves unavailable data");
+        check(DiskCollector.CounterValue(0, 12345) == 12345 && DiskCollector.CounterValue(1, 0) == 0 &&
+            DiskCollector.CounterValue(0xC0000BC6, 100) == null && DiskCollector.CounterValue(0, double.NaN) == null,
+            "Disk counters accept measured zero and reject invalid status/nonfinite readings");
         var rate = new CounterRate();
         check(rate.Observe(1000, 0) == null, "Counter warmup is unavailable, never a fabricated zero");
         check(rate.Observe(3048, Stopwatch.Frequency * 2) == 1024, "Counter rate reports bytes per monotonic second");

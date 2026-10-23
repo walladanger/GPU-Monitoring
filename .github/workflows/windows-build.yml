@@ -52,6 +52,11 @@ jobs:
           $ram = $system.Current.Samples | Where-Object MetricKey -eq 'ram.total'
           $cpu = $system.History | Where-Object { $_.MetricKey -eq 'cpu.usage' -and $null -ne $_.Value }
           if ($ram.Value -le 0 -or $cpu.Count -lt 1) { throw 'Missing measured CPU/RAM telemetry' }
+          $disks = $sources | Where-Object Source -eq 'windows-disks'
+          $diskRead = $disks.History | Where-Object { $_.MetricKey -eq 'disk.read' -and $null -ne $_.Value }
+          if ($disks.Health -ne 'Live' -or $diskRead.Count -lt 1) { throw 'Missing physical disk throughput samples' }
+          $processes = $sources | Where-Object Source -eq 'windows-processes'
+          if ($processes.Health -ne 'Live' -or -not ($processes.Current.Devices | Where-Object DisplayIndex -eq $process.Id)) { throw 'Collector process missing from inventory' }
           if (-not (Test-Path (Join-Path $output 'telemetry.csv'))) { throw 'Missing CSV export' }
           Get-Content (Join-Path $output 'telemetry.txt')
       - name: Verify native overview charts and capture fixture screenshots

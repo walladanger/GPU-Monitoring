@@ -57,7 +57,8 @@ public sealed class TelemetrySession(ITelemetryProvider provider)
         foreach (var sample in batch.Samples)
         {
             var key = (sample.Device.Id, sample.MetricKey);
-            if (!histories.TryGetValue(key, out var history)) histories[key] = history = new();
+            if (!histories.TryGetValue(key, out var history)) histories[key] = history = provider is ITelemetryHistoryPolicy policy
+                ? new(policy.HistoryCapacity, policy.HistoryRetention) : new();
             history.Append(sample);
         }
         Prune(observedAt);
