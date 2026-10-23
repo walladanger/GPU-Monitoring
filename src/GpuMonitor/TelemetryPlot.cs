@@ -109,11 +109,13 @@ public sealed class TelemetryPlot : Grid
         {
             var sample = PlotData.Nearest(samples, time.Value);
             return sample == null ? "" : $"{series[i].Name} · {sample.Time.ToLocalTime():HH:mm:ss.fff} · " +
-                (sample.Value is double value ? $"{value / divisor:0.###} {unit}" : "N/A");
+                (sample.Value is double value ? $"{value / divisor:R} {unit}" : "N/A");
         }));
     }
 
     public IReadOnlyList<TelemetrySample> VisibleSamples => visible.SelectMany(s => s).OrderBy(s => s.Time).ToArray();
 
     public int SeriesCount => series.Count;
+    public void SetMaximum(double? maximum) => valueAxis.MaxLimit = maximum;
+    public void SetName(int index, string name) => series[index].Name = name;
 }

@@ -38,6 +38,20 @@ jobs:
       - name: Publish runtime-bundled ZIP
         shell: pwsh
         run: ./src/GpuMonitor/packaging/Build-Package.ps1
+      - name: Verify native overview charts and capture fixture screenshots
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $process = Start-Process $exe -ArgumentList '--verify-overview' -PassThru
+          if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'Overview verification timed out' }
+          if ($process.ExitCode -ne 0) { throw 'Overview verification failed' }
+          Get-Content (Join-Path (Split-Path $exe) 'overview-verification/result.txt')
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: GPU-Monitor-Overview-Verification
+          path: src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/overview-verification/
+          if-no-files-found: warn
       - name: Compile installer
         shell: pwsh
         run: |

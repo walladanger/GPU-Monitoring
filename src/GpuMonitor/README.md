@@ -12,6 +12,12 @@ Supported charts: utilization, VRAM used, core temperature, power, fan percentag
 
 ## Features
 
+The v2 development branch opens the new native Overview with larger LiveCharts2
+GPU/VRAM plots, synchronized inspection and a GPU comparison. Use `--legacy-ui`
+to open the earlier dashboard. The new view remains subject to visual signoff;
+see `docs/GPU_MONITOR_V2_OVERVIEW.md` in the repository for scope and limits.
+Right-click an Overview graph to export its visible samples as CSV or JSON.
+
 - All-GPU and per-GPU views
 - 1, 2, 5 or 10 second refresh intervals
 - 5, 15 or 30 minute chart windows

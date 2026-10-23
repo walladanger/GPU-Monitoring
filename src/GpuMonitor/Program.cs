@@ -19,7 +19,7 @@ public sealed class Settings
     public static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GpuMonitor", "settings.json");
     public static Settings Load()
     {
-        try { var s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new(); s.RefreshSeconds = new[] { 1, 2, 5, 10 }.Contains(s.RefreshSeconds) ? s.RefreshSeconds : 2; s.WindowMinutes = new[] { 5, 15, 30 }.Contains(s.WindowMinutes) ? s.WindowMinutes : 5; return s; }
+        try { var s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new(); s.RefreshSeconds = new[] { 1, 2, 5, 10 }.Contains(s.RefreshSeconds) ? s.RefreshSeconds : 2; s.WindowMinutes = new[] { 1, 5, 15, 30 }.Contains(s.WindowMinutes) ? s.WindowMinutes : 5; return s; }
         catch { return new(); }
     }
     public void Save() { Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!); File.WriteAllText(FilePath, JsonSerializer.Serialize(this)); }
@@ -29,6 +29,7 @@ public static class Program
 {
     [STAThread] public static void Main(string[] args)
     {
+        if (args.Contains("--verify-overview")) { OverviewChecks.Run(); return; }
         if (args.Contains("--self-test"))
         {
             try { SmokeChecks.Run(); }
@@ -37,11 +38,12 @@ public static class Program
         }
         using var instance = new Mutex(true, "Local\\GpuMonitor", out bool firstInstance);
         if (!firstInstance) { System.Windows.MessageBox.Show("GPU Monitor is already running. Open it from its tray icon.", "GPU Monitor"); return; }
-        var app = new Application(); var dashboard = new Dashboard();
+        var app = new Application();
+        Window dashboard = args.Contains("--legacy-ui") || args.Contains("--verify-ui") ? new Dashboard() : new OverviewWindow();
         if (args.Contains("--verify-ui"))
         {
             var verify = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
-            verify.Tick += (_, _) => { verify.Stop(); dashboard.VerifyAndCapture(); dashboard.Close(); };
+            verify.Tick += (_, _) => { verify.Stop(); ((Dashboard)dashboard).VerifyAndCapture(); dashboard.Close(); };
             dashboard.Loaded += (_, _) => verify.Start();
         }
         try { app.Run(dashboard); }
@@ -77,7 +79,7 @@ public sealed class Dashboard : Window
         AddLabel(toolbar, "Show"); toolbar.Children.Add(gpuChoice); gpuChoice.SelectionChanged += (_, _) => FilterPanels();
         AddLabel(toolbar, "Refresh"); var refresh = new ComboBox { Width = 90, ItemsSource = new[] { 1, 2, 5, 10 }, SelectedItem = settings.RefreshSeconds }; toolbar.Children.Add(refresh);
         refresh.SelectionChanged += (_, _) => { settings.RefreshSeconds = (int)refresh.SelectedItem; timer.Interval = TimeSpan.FromSeconds(settings.RefreshSeconds); SaveSettings(); };
-        AddLabel(toolbar, "History (min)"); var range = new ComboBox { Width = 70, ItemsSource = new[] { 5, 15, 30 }, SelectedItem = settings.WindowMinutes }; toolbar.Children.Add(range);
+        AddLabel(toolbar, "History (min)"); var range = new ComboBox { Width = 70, ItemsSource = new[] { 1, 5, 15, 30 }, SelectedItem = settings.WindowMinutes }; toolbar.Children.Add(range);
         range.SelectionChanged += (_, _) => { settings.WindowMinutes = (int)range.SelectedItem; SaveSettings(); Redraw(); };
         var scan = new Button { Content = "Rescan now", Margin = new(12, 0, 0, 0), Padding = new(10, 4, 10, 4) }; toolbar.Children.Add(scan); scan.Click += async (_, _) => await RefreshAsync();
         var export = new Button { Content = "Export CSV", Margin = new(8, 0, 0, 0), Padding = new(10, 4, 10, 4) }; toolbar.Children.Add(export); export.Click += (_, _) => Export();
