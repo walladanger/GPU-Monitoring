@@ -36,11 +36,15 @@ Task polling = engine.RunAsync(TimeSpan.FromSeconds(2), stop.Token);
 
 ## Inference metrics: SGLang and vLLM
 
+Both have named ready-to-use factories: `RuntimeMetricsCollector.CreateSglang()` and `RuntimeMetricsCollector.CreateVllm()`, defaulting to local ports 30000 and 8000. Configuration entries may omit `Endpoint` to use these defaults. The installed and portable packages include `config/sglang-vllm.sources.json` with both adapters enabled and `config/SGLang-vLLM-README.txt` with the exact collection command. This preset runs only when explicitly selected; normal app launch remains unchanged.
+
 Set `Kind` to `sglang` or `vllm` and configure its `/metrics` URL. SGLang must already have metrics enabled. These are read-only HTTP GET requests, never inference or model-loading requests. Responses are limited to 4 MiB, 20,000 samples, 32 label sets per source, 32 labels per sample and a three-second request/body deadline. Redirects, cookies and system proxies are disabled. URLs cannot embed credentials, query parameters or fragments. No credentials are required or collected by this adapter.
 
 The adapters map prompt/output token counters and rates, running/waiting request counts, KV-cache ratios, SGLang cache-hit ratio, TTFT and request/decode histogram sums/counts. vLLM current and earlier cache names are aliases, not additive series. Each distinct label set has a stable hash identity; model names remain readable. Other labels are not copied into exports. Missing measurements are null. Histograms produce interval means from changes in sums/counts, not fabricated p95/p99 values.
 
 Counter rates use monotonic scrape intervals unless the exporter supplies an explicit sample timestamp, in which case the source time is preserved and used. Counter decreases, duplicate timestamps and HTTP failures create gaps rather than spikes. The first scrape after reconnection warms up again. No cache tokens are added to prompt totals. Cache percentages are scaled from exporter fractions. Label sets are not aggregated across workers because that could double count distributed metrics.
+
+Inter-token histogram means use `inter_token_latency_seconds` on current SGLang/vLLM; older vLLM `time_per_output_token_seconds` is an alias. These stay separate from per-request `request_time_per_output_token_seconds` means because the observation weighting differs. Real loopback HTTP tests exercise both configured adapters, including reconnection, metric mapping and current/legacy alias precedence, on Linux and Windows.
 
 A `prometheus` runtime kind supports explicit custom `Metrics` mappings, including a ForgeCore exporter if it actually publishes Prometheus data. Each mapping specifies `Name`, `Key`, `Title`, `Unit`, optional positive `Multiplier`, and `Counter`. Counter mappings additionally expose `Key + ".rate"`. This does not claim compatibility with an unverified private ForgeCore API.
 

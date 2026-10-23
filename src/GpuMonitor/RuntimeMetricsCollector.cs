@@ -11,6 +11,12 @@ public sealed record RuntimeMetricMap(string Name, string Key, string Title, str
 /// <summary>Optional, bounded, read-only scrape. No inference requests or prompt capture.</summary>
 public sealed class RuntimeMetricsCollector : ITelemetryProvider, IDisposable, ITelemetryHistoryPolicy
 {
+    public static Uri DefaultSglangEndpoint { get; } = new("http://127.0.0.1:30000/metrics");
+    public static Uri DefaultVllmEndpoint { get; } = new("http://127.0.0.1:8000/metrics");
+    public static RuntimeMetricsCollector CreateSglang(string id = "sglang-local", Uri? endpoint = null) =>
+        new(id, endpoint ?? DefaultSglangEndpoint, StandardMaps("sglang"));
+    public static RuntimeMetricsCollector CreateVllm(string id = "vllm-local", Uri? endpoint = null) =>
+        new(id, endpoint ?? DefaultVllmEndpoint, StandardMaps("vllm"));
     public string SourceId { get; }
     public int HistoryCapacity => 900;
     public TimeSpan HistoryRetention => TimeSpan.FromMinutes(30);
@@ -34,7 +40,7 @@ public sealed class RuntimeMetricsCollector : ITelemetryProvider, IDisposable, I
         SourceId = "runtime:" + id; this.endpoint = endpoint; this.maps = maps.ToArray();
         client = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, UseProxy = false })
             { Timeout = TimeSpan.FromSeconds(3), MaxResponseContentBufferSize = 4 * 1024 * 1024 };
-        derivedMeans = new[] { "ttft", "request", "decode" }.Where(k => maps.Any(m => m.Key == "latency." + k + ".sum") && maps.Any(m => m.Key == "latency." + k + ".count") && !maps.Any(m => m.Key == "latency." + k + ".mean"))
+        derivedMeans = new[] { "ttft", "request", "decode", "inter_token" }.Where(k => maps.Any(m => m.Key == "latency." + k + ".sum") && maps.Any(m => m.Key == "latency." + k + ".count") && !maps.Any(m => m.Key == "latency." + k + ".mean"))
             .Select(k => new MetricDefinition(SourceId, "latency." + k + ".mean", "Interval mean " + k + " latency", "s")).ToArray();
         Definitions = Array.AsReadOnly(maps.Select(m => new MetricDefinition(SourceId, m.Key, m.Title, m.Unit))
             .Concat(maps.Where(m => m.Counter).Select(m => new MetricDefinition(SourceId, m.Key + ".rate", m.Title + " rate", m.Unit + "/s")))
@@ -114,7 +120,7 @@ public sealed class RuntimeMetricsCollector : ITelemetryProvider, IDisposable, I
     {
         if (runtime is not ("sglang" or "vllm")) throw new ArgumentException("Unknown runtime kind.");
         string prefix = runtime + ":";
-        return Array.AsReadOnly(new RuntimeMetricMap[] {
+        var result = new List<RuntimeMetricMap> {
             new(prefix + "prompt_tokens_total", "tokens.prompt", "Prompt tokens", "tokens", Counter: true),
             new(prefix + "generation_tokens_total", "tokens.output", "Output tokens", "tokens", Counter: true),
             new(prefix + (runtime == "sglang" ? "num_running_reqs" : "num_requests_running"), "requests.running", "Running requests", "count"),
@@ -126,8 +132,15 @@ public sealed class RuntimeMetricsCollector : ITelemetryProvider, IDisposable, I
             new(prefix + "e2e_request_latency_seconds_sum", "latency.request.sum", "Request cumulative duration", "s", Counter: true),
             new(prefix + "e2e_request_latency_seconds_count", "latency.request.count", "Request observations", "count", Counter: true),
             new(prefix + "request_time_per_output_token_seconds_sum", "latency.decode.sum", "Decode cumulative duration", "s", Counter: true),
-            new(prefix + "request_time_per_output_token_seconds_count", "latency.decode.count", "Decode observations", "count", Counter: true)
-        });
+            new(prefix + "request_time_per_output_token_seconds_count", "latency.decode.count", "Decode observations", "count", Counter: true),
+            new(prefix + "inter_token_latency_seconds_sum", "latency.inter_token.sum", "Inter-token cumulative duration", "s", Counter: true),
+            new(prefix + "inter_token_latency_seconds_count", "latency.inter_token.count", "Inter-token observations", "count", Counter: true)
+        };
+        if (runtime == "vllm") result.AddRange([
+            new(prefix + "time_per_output_token_seconds_sum", "latency.inter_token.sum", "Inter-token cumulative duration", "s", Counter: true),
+            new(prefix + "time_per_output_token_seconds_count", "latency.inter_token.count", "Inter-token observations", "count", Counter: true)
+        ]);
+        return result.AsReadOnly();
     }
     public void Dispose() => client.Dispose();
 }

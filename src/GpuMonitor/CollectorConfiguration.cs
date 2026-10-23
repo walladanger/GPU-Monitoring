@@ -55,8 +55,14 @@ public sealed class BackendProviderSet : IDisposable
             foreach (var source in configuration.Runtimes.Where(s => s.Enabled))
             {
                 ValidateId(source.Id);
-                var maps = source.Kind == "prometheus" ? source.Metrics : RuntimeMetricsCollector.StandardMaps(source.Kind);
-                result.providers.Add(new RuntimeMetricsCollector(source.Id, new Uri(source.Endpoint, UriKind.Absolute), maps));
+                var endpoint = string.IsNullOrWhiteSpace(source.Endpoint) ? null : new Uri(source.Endpoint, UriKind.Absolute);
+                result.providers.Add(source.Kind switch
+                {
+                    "sglang" => RuntimeMetricsCollector.CreateSglang(source.Id, endpoint),
+                    "vllm" => RuntimeMetricsCollector.CreateVllm(source.Id, endpoint),
+                    "prometheus" => new RuntimeMetricsCollector(source.Id, endpoint ?? throw new FormatException("Custom metrics require an endpoint."), source.Metrics),
+                    _ => throw new FormatException("Unknown runtime kind.")
+                });
             }
             foreach (var feed in configuration.Feeds.Where(f => f.Enabled))
             {
