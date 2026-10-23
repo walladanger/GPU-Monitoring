@@ -40,15 +40,16 @@ public sealed class WindowsSystemCollector : ITelemetryProvider
             (key?.GetValue("ProcessorNameString") as string)?.Trim() ?? "CPU", "0");
         var ram = new DeviceIdentity(SourceId, "physical-memory", DeviceKind.Memory, "Physical RAM", "0");
         var samples = new List<TelemetrySample>();
+        uint logicalProcessors = GetActiveProcessorCount(0xffff);
         double? usage = null;
         if (GetSystemTimes(out var idle, out var kernel, out var user))
         {
-            if (Environment.ProcessorCount <= 64 && previous is { } old) usage = CpuUsage(old.Idle, old.Kernel, old.User, idle, kernel, user);
+            if (logicalProcessors is > 0 and <= 64 && previous is { } old) usage = CpuUsage(old.Idle, old.Kernel, old.User, idle, kernel, user);
             previous = (idle, kernel, user);
         }
         else previous = null;
         samples.Add(new(cpu, "cpu.usage", now, usage));
-        samples.Add(new(cpu, "cpu.logical", now, Environment.ProcessorCount));
+        samples.Add(new(cpu, "cpu.logical", now, logicalProcessors > 0 ? logicalProcessors : null));
         var memory = new MemoryStatus { Length = (uint)Marshal.SizeOf<MemoryStatus>() };
         bool available = GlobalMemoryStatusEx(ref memory);
         samples.Add(new(ram, "ram.total", now, available ? memory.TotalPhysical : null));
@@ -78,6 +79,8 @@ public sealed class WindowsSystemCollector : ITelemetryProvider
         public ulong TotalPhysical, AvailablePhysical, TotalPageFile, AvailablePageFile,
             TotalVirtual, AvailableVirtual, AvailableExtendedVirtual;
     }
+    [DllImport("kernel32.dll")]
+    private static extern uint GetActiveProcessorCount(ushort group);
     [DllImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetSystemTimes(out ulong idle, out ulong kernel, out ulong user);
