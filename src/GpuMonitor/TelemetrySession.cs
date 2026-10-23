@@ -6,6 +6,7 @@ public enum ProviderHealth { Starting, Live, Stale }
 public sealed class TelemetrySession(ITelemetryProvider provider)
 {
     private readonly Dictionary<(string Device, string Metric), TelemetrySeriesBuffer> histories = [];
+    private readonly Dictionary<(string Id, string Kind), TelemetryEvent> events = [];
     public ProviderHealth Health { get; private set; } = ProviderHealth.Starting;
     public TelemetryBatch? Current { get; private set; }
     public DateTimeOffset? LastSuccess { get; private set; }
@@ -33,8 +34,10 @@ public sealed class TelemetrySession(ITelemetryProvider provider)
     /// <summary>Accepts a complete provider snapshot. Invalid batches leave the last snapshot intact.</summary>
     public void Apply(TelemetryBatch batch, DateTimeOffset observedAt)
     {
+        if (batch.Events.Count > 4096) throw new ArgumentException("Event batch exceeds limit.", nameof(batch));
         var devices = batch.Devices.ToDictionary(d => d.Id);
         var definitions = provider.Definitions.Select(d => d.Key).ToHashSet();
+        var units = provider.Definitions.ToDictionary(d => d.Key, d => d.Unit);
         var keys = new HashSet<(string Device, string Metric)>();
         if (batch.Devices.Any(d => d.Source != provider.SourceId))
             throw new ArgumentException("Snapshot contains a device from another provider.", nameof(batch));
@@ -50,8 +53,10 @@ public sealed class TelemetrySession(ITelemetryProvider provider)
                 !definitions.Contains(capability.MetricKey) || !capabilityKeys.Add((device.Id, capability.MetricKey)))
                 throw new ArgumentException("Snapshot contains unknown or duplicate capabilities.", nameof(batch));
         if (batch.Events.Any(e => e.Source != provider.SourceId ||
-            (e.DeviceId != null && !devices.ContainsKey(e.DeviceId)) || e.Duration < TimeSpan.Zero))
+            (e.DeviceId != null && !devices.ContainsKey(e.DeviceId)) || e.Duration < TimeSpan.Zero ||
+            e.Measurements?.Count > 16 || (e.Measurements?.Any(m => !units.TryGetValue(m.MetricKey, out var unit) || unit != m.Unit || !double.IsFinite(m.Value)) ?? false)))
             throw new ArgumentException("Snapshot contains an invalid event.", nameof(batch));
+        var frozenEvents = batch.Events.Select(e => e with { Time = e.Time.ToUniversalTime(), Measurements = e.Measurements == null ? null : Array.AsReadOnly(e.Measurements.ToArray()) }).ToArray();
         // Bound total histories to this provider's current devices and advertised metrics.
         foreach (var key in histories.Keys.Where(k => !devices.ContainsKey(k.Device)).ToArray()) histories.Remove(key);
         foreach (var sample in batch.Samples)
@@ -61,10 +66,12 @@ public sealed class TelemetrySession(ITelemetryProvider provider)
                 ? new(policy.HistoryCapacity, policy.HistoryRetention) : new();
             history.Append(sample);
         }
+        foreach (var activity in frozenEvents) events.TryAdd((activity.Id, activity.Kind), activity);
+        foreach (var key in events.OrderBy(e => e.Value.Time).Take(Math.Max(0, events.Count - 4096)).Select(e => e.Key).ToArray()) events.Remove(key);
         Prune(observedAt);
         // Own the collections: a provider must not mutate published snapshots after a poll.
         Current = new(Array.AsReadOnly(batch.Devices.ToArray()), Array.AsReadOnly(batch.Capabilities.ToArray()),
-            Array.AsReadOnly(batch.Samples.ToArray()), Array.AsReadOnly(batch.Events.ToArray()));
+            Array.AsReadOnly(batch.Samples.ToArray()), Array.AsReadOnly(frozenEvents));
         LastSuccess = observedAt.ToUniversalTime(); Error = null; Health = ProviderHealth.Live;
     }
 
@@ -82,6 +89,7 @@ public sealed class TelemetrySession(ITelemetryProvider provider)
     public void Prune(DateTimeOffset now)
     {
         foreach (var history in histories.Values) history.Prune(now);
+        foreach (var key in events.Where(e => now - e.Value.Time > TimeSpan.FromMinutes(30)).Select(e => e.Key).ToArray()) events.Remove(key);
     }
 
     public IReadOnlyList<TelemetrySample> History(string deviceId, string metricKey) =>
@@ -89,6 +97,7 @@ public sealed class TelemetrySession(ITelemetryProvider provider)
 
     public IReadOnlyList<TelemetrySample> HistorySnapshot() => Array.AsReadOnly(
         histories.Values.SelectMany(h => h.Snapshot()).ToArray());
+    public IReadOnlyList<TelemetryEvent> EventSnapshot() => Array.AsReadOnly(events.Values.OrderBy(e => e.Time).ToArray());
 }
 
 /// <summary>Compatibility projection for the existing GPU cards/export during chart migration.</summary>

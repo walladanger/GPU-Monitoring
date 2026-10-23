@@ -27,8 +27,11 @@ public sealed record TelemetrySample
 }
 
 /// <summary>Metadata-only discrete activity. No prompt, message or tool payload field.</summary>
+public sealed record EventMeasurement(string MetricKey, string Unit, double Value);
 public sealed record TelemetryEvent(string Source, string Id, DateTimeOffset Time, string Kind,
-    string? DeviceId = null, string? CorrelationId = null, TimeSpan? Duration = null);
+    string? DeviceId = null, string? CorrelationId = null, TimeSpan? Duration = null,
+    bool TimestampEstimated = false, string? ParentId = null, string? Name = null,
+    IReadOnlyList<EventMeasurement>? Measurements = null, string? ActivityId = null);
 
 public sealed record TelemetryBatch(IReadOnlyList<DeviceIdentity> Devices,
     IReadOnlyList<MetricCapability> Capabilities, IReadOnlyList<TelemetrySample> Samples,
