@@ -34,7 +34,8 @@ public static class SmokeChecks
         var oldReadings = CsvTelemetry.Parse(Row(0, "A"), time.AddHours(-1)).ToArray();
         foreach (var metric in Metrics.All)
         {
-            var chart = new HistoryChart(oldReadings, metric, 5, 24576) { Width = 400, Height = 65 };
+            var samples = NvidiaTelemetry.Normalize(oldReadings).Samples.Where(s => s.MetricKey == metric.Key).ToArray();
+            var chart = new HistoryChart(samples, metric, 5, 24576) { Width = 400, Height = 65 };
             chart.Measure(new System.Windows.Size(400, 65)); chart.Arrange(new System.Windows.Rect(0, 0, 400, 65));
             var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(400, 65, 96, 96, System.Windows.Media.PixelFormats.Pbgra32); bitmap.Render(chart);
         }

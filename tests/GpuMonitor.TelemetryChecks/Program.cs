@@ -54,4 +54,5 @@ Check(fast.History["GPU-A"].Count == 3600, "Fast sampling is capped at 3600 read
 active.Apply([]);
 Check(active.Current.Count == 0 && active.History.Count == 0, "Successful zero-device result clears active inventory");
 TelemetryContractChecks.Run(Check);
+await TelemetrySessionChecks.Run(Check);
 Console.WriteLine($"PASS: {passed} telemetry regression checks (no hardware or WPF required).");

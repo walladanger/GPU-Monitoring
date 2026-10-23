@@ -52,7 +52,7 @@ public static class Program
 public sealed class Dashboard : Window
 {
     private readonly Inventory inventory = new();
-    private readonly NvidiaCollector collector = new();
+    private readonly TelemetrySession session = new(new NvidiaCollector());
     private readonly Settings settings = Settings.Load();
     private readonly CancellationTokenSource stop = new();
     private readonly WrapPanel panels = new();
@@ -112,6 +112,11 @@ public sealed class Dashboard : Window
     }
     internal void ApplyReadings(IReadOnlyList<GpuReading> readings)
     {
+        session.Apply(NvidiaTelemetry.Normalize(readings), DateTimeOffset.UtcNow);
+        ApplySnapshot(readings);
+    }
+    private void ApplySnapshot(IReadOnlyList<GpuReading> readings)
+    {
         inventory.Apply(readings);
         telemetryAvailable = true;
         var ids = readings.Select(g => g.Id).ToHashSet();
@@ -131,15 +136,15 @@ public sealed class Dashboard : Window
         if (reading || closed) return; reading = true;
         try
         {
-            var readings = await collector.ReadAsync(stop.Token); if (closed) return;
-            ApplyReadings(readings);
+            await session.RefreshAsync(stop.Token); if (closed) return;
+            ApplySnapshot(NvidiaSnapshot.Readings(session.Current!));
         }
         catch (OperationCanceledException) { if (!closed) SetError("NVIDIA query timed out. Retrying automatically."); }
         catch (Exception e) { if (!closed) SetError("Telemetry unavailable: " + e.Message + "\nCheck the NVIDIA driver. Retrying automatically; previous readings are stale."); }
         finally { reading = false; }
     }
-    private void SetError(string message) { telemetryAvailable = false; status.Foreground = Brushes.Salmon; status.Text = message; foreach (var panel in gpuPanels.Values) panel.Opacity = .45; }
-    private void Redraw() { foreach (var g in inventory.Current) { gpuPanels[g.Id].Opacity = telemetryAvailable ? 1 : .45; gpuPanels[g.Id].Update(g, inventory.History[g.Id], settings.WindowMinutes); } FilterPanels(); }
+    private void SetError(string message) { telemetryAvailable = false; status.Foreground = Brushes.Salmon; status.Text = message; Redraw(); }
+    private void Redraw() { session.Prune(DateTimeOffset.UtcNow); foreach (var g in inventory.Current) { gpuPanels[g.Id].Opacity = telemetryAvailable ? 1 : .45; gpuPanels[g.Id].Update(g, session, settings.WindowMinutes); } FilterPanels(); }
     private void FilterPanels() { var id = (gpuChoice.SelectedItem as GpuOption)?.Id; foreach (var pair in gpuPanels) pair.Value.Visibility = id == null || pair.Key == id ? Visibility.Visible : Visibility.Collapsed; }
     private void Export()
     {
@@ -168,7 +173,7 @@ public sealed class GpuPanel : Border
         Width = 520; Padding = new(20); Margin = new(0, 0, 16, 16); CornerRadius = new(12); Background = new SolidColorBrush(Color.FromRgb(20, 30, 43));
         var root = new StackPanel(); Child = root; root.Children.Add(title); root.Children.Add(identity); root.Children.Add(metrics);
     }
-    public void Update(GpuReading gpu, IEnumerable<GpuReading> history, int minutes)
+    public void Update(GpuReading gpu, TelemetrySession session, int minutes)
     {
         title.Text = $"GPU {gpu.Index} · {gpu.Name}"; identity.Text = $"{gpu.Id}\nPCI {gpu.Bus} · {gpu.Metrics["memory.total"] / 1024:0.#} GiB VRAM";
         metrics.Children.Clear();
@@ -180,24 +185,24 @@ public sealed class GpuPanel : Border
             var row = new DockPanel { Margin = new(0, 4, 0, 0) };
             var text = new TextBlock { Text = value == null ? "N/A" : $"{value:0.#} {metric.Unit}", Foreground = Brushes.White, FontWeight = FontWeights.SemiBold };
             DockPanel.SetDock(text, Dock.Right); row.Children.Add(text); row.Children.Add(new TextBlock { Text = metric.Title, Foreground = Brushes.LightGray }); metrics.Children.Add(row);
-            metrics.Children.Add(new HistoryChart(history.ToArray(), metric, minutes, gpu.Metrics["memory.total"]) { Height = 65, Margin = new(0, 4, 0, 10) });
+            metrics.Children.Add(new HistoryChart(session.History(gpu.Id, metric.Key), metric, minutes, gpu.Metrics["memory.total"]) { Height = 65, Margin = new(0, 4, 0, 10) });
         }
     }
 }
 
-public sealed class HistoryChart(GpuReading[] samples, Metric metric, int minutes, double? memoryTotal) : FrameworkElement
+public sealed class HistoryChart(IReadOnlyList<TelemetrySample> samples, Metric metric, int minutes, double? memoryTotal) : FrameworkElement
 {
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc); double w = ActualWidth, h = ActualHeight; if (w <= 0 || h <= 0) return;
         var now = DateTimeOffset.Now; var start = now.AddMinutes(-minutes); var points = samples.Where(s => s.Time >= start).ToArray();
         if (points.Length == 0) return;
-        double max = metric.Scale ?? (metric.Key == "memory.used" ? memoryTotal ?? 1 : Math.Max(1, points.Max(s => s.Metrics[metric.Key] ?? 0) * 1.15));
+        double max = metric.Scale ?? (metric.Key == "memory.used" ? memoryTotal ?? 1 : Math.Max(1, points.Max(s => s.Value ?? 0) * 1.15));
         for (int i = 0; i < 3; i++) dc.DrawLine(new Pen(new SolidColorBrush(Color.FromRgb(40, 54, 72)), 1), new(0, h * i / 2), new(w, h * i / 2));
         Point? previous = null;
         foreach (var sample in points)
         {
-            var value = sample.Metrics[metric.Key]; if (value == null) { previous = null; continue; }
+            var value = sample.Value; if (value == null) { previous = null; continue; }
             var point = new Point((sample.Time - start).TotalSeconds / (minutes * 60) * w, h - Math.Clamp(value.Value / Math.Max(max, 1), 0, 1) * h);
             if (previous is Point p) dc.DrawLine(new Pen(Brushes.MediumAquamarine, 1.8), p, point);
             else dc.DrawEllipse(Brushes.MediumAquamarine, null, point, 2, 2);
