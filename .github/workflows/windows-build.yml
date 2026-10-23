@@ -2,14 +2,24 @@ name: Windows application
 on:
   push:
     branches: [main]
-    paths: ['src/GpuMonitor/**', '.github/workflows/windows-build.yml']
+    paths: ['src/GpuMonitor/**', 'tests/**', '.github/workflows/windows-build.yml']
   pull_request:
-    paths: ['src/GpuMonitor/**', '.github/workflows/windows-build.yml']
+    paths: ['src/GpuMonitor/**', 'tests/**', '.github/workflows/windows-build.yml']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
+  telemetry-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify parser and inventory without NVIDIA hardware
+        run: dotnet run --project tests/GpuMonitor.TelemetryChecks -c Release
   package:
+    needs: telemetry-checks
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
