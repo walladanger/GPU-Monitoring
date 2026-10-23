@@ -19,6 +19,8 @@ $candidates = @(
     (Join-Path $env:LOCALAPPDATA 'Programs\GpuMonitor\GpuMonitor.exe'),
     (Join-Path $root 'GpuMonitor.exe'),
     (Join-Path $root 'src\GpuMonitor\publish\GpuMonitor.exe'),
+    (Join-Path $root 'src\GpuMonitor\bin\Release\net10.0-windows10.0.19041.0\win-x64\GpuMonitor.exe'),
+    (Join-Path $root 'src\GpuMonitor\bin\Release\net10.0-windows10.0.19041.0\GpuMonitor.exe'),
     (Join-Path $root 'src\GpuMonitor\bin\Release\net10.0-windows\win-x64\GpuMonitor.exe')
 )
 $exe = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
