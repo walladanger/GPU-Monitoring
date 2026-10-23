@@ -41,7 +41,7 @@ public sealed class OverviewWindow : Window
         Background = OverviewTheme.Canvas; Foreground = Brushes.White; FontFamily = new("Segoe UI");
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.CanResize;
         WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 0, ResizeBorderThickness = new(6), GlassFrameThickness = new(0), CornerRadius = new(0) });
-        var root = new Grid(); root.RowDefinitions.Add(new() { Height = new(72) }); root.RowDefinitions.Add(new()); Content = root;
+        var root = new Grid { Background = OverviewTheme.Canvas }; root.RowDefinitions.Add(new() { Height = new(72) }); root.RowDefinitions.Add(new()); Content = root;
         root.Children.Add(CreateHeader());
         var workspace = new Grid(); workspace.ColumnDefinitions.Add(rail); workspace.ColumnDefinitions.Add(new()); Grid.SetRow(workspace, 1); root.Children.Add(workspace);
         var sidebar = new DockPanel { Background = OverviewTheme.Brush("#171D25"), Margin = new(0, 1, 0, 0) };

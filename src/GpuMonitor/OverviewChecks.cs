@@ -43,11 +43,17 @@ internal static class OverviewChecks
             try
             {
                 window.UpdateLayout();
+                var viewport = window.VerificationRoot;
+                var viewportSize = new Size(cases[index].Item2, 1024);
+                viewport.Measure(viewportSize); viewport.Arrange(new Rect(viewportSize)); viewport.UpdateLayout();
                 var bitmap = Capture(window.VerificationRoot);
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
                 var (count, width) = cases[index];
                 if (bitmap.PixelWidth != width || bitmap.PixelHeight != 1024)
                     throw new InvalidOperationException("Fixture viewport dimensions do not match the requested reference size.");
+                var marginPixel = new byte[4]; bitmap.CopyPixels(new Int32Rect(225, 250, 1, 1), marginPixel, 4, 0);
+                if (marginPixel[0] != 29 || marginPixel[1] != 23 || marginPixel[2] != 16)
+                    throw new InvalidOperationException("Viewport capture scaled or clipped the 222-DIP navigation boundary.");
                 using (var stream = File.Create(Path.Combine(output, $"fixture-{count}-gpus-{width}.png"))) encoder.Save(stream);
                 // Inspect chart interiors, excluding all card headings and numeric labels.
                 if (count > 0)
@@ -90,8 +96,14 @@ internal static class OverviewChecks
     {
         var bitmap = new RenderTargetBitmap((int)view.ActualWidth, (int)view.ActualHeight, 96, 96, PixelFormats.Pbgra32);
         var drawing = new DrawingVisual();
-        using (var context = drawing.RenderOpen())
-            context.DrawRectangle(new VisualBrush(view), null, new Rect(0, 0, view.ActualWidth, view.ActualHeight));
+        var bounds = new Rect(0, 0, view.ActualWidth, view.ActualHeight);
+        var brush = new VisualBrush(view)
+        {
+            ViewboxUnits = BrushMappingMode.Absolute, Viewbox = bounds,
+            ViewportUnits = BrushMappingMode.Absolute, Viewport = bounds,
+            Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top
+        };
+        using (var context = drawing.RenderOpen()) context.DrawRectangle(brush, null, bounds);
         // VisualBrush captures in local coordinates instead of including layout offsets.
         bitmap.Render(drawing); return bitmap;
     }
