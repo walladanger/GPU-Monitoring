@@ -53,4 +53,5 @@ for (int i = 0; i < 4000; i++) fast.Apply(CsvTelemetry.Parse(Row(0, "A"), time.A
 Check(fast.History["GPU-A"].Count == 3600, "Fast sampling is capped at 3600 readings per GPU");
 active.Apply([]);
 Check(active.Current.Count == 0 && active.History.Count == 0, "Successful zero-device result clears active inventory");
+TelemetryContractChecks.Run(Check);
 Console.WriteLine($"PASS: {passed} telemetry regression checks (no hardware or WPF required).");
