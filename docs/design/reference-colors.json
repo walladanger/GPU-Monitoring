@@ -1,0 +1,72 @@
+{
+  "canvas": {
+    "hex": "#10171D",
+    "sample_xy": [
+      230,
+      210
+    ]
+  },
+  "sidebar": {
+    "hex": "#171D25",
+    "sample_xy": [
+      100,
+      800
+    ]
+  },
+  "card": {
+    "hex": "#171E27",
+    "sample_xy": [
+      400,
+      450
+    ]
+  },
+  "border": {
+    "hex": "#262E37",
+    "sample_xy": [
+      239,
+      350
+    ]
+  },
+  "gpu_green": {
+    "hex": "#33DF32",
+    "sample_xy": [
+      259,
+      244
+    ]
+  },
+  "memory_blue": {
+    "hex": "#2B82F8",
+    "sample_xy": [
+      548,
+      966
+    ]
+  },
+  "power_amber": {
+    "hex": "#F9B84D",
+    "sample_xy": [
+      1361,
+      179
+    ]
+  },
+  "text_primary": {
+    "hex": "#FFFFFF",
+    "sample_xy": [
+      84,
+      18
+    ]
+  },
+  "text_muted": {
+    "hex": "#A5AEB7",
+    "sample_xy": [
+      201,
+      49
+    ]
+  },
+  "selection": {
+    "hex": "#184880",
+    "sample_xy": [
+      180,
+      115
+    ]
+  }
+}
