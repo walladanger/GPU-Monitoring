@@ -38,6 +38,22 @@ jobs:
       - name: Publish runtime-bundled ZIP
         shell: pwsh
         run: ./src/GpuMonitor/packaging/Build-Package.ps1
+      - name: Verify backend collection without a dashboard
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $output = Join-Path $env:RUNNER_TEMP 'gpu-headless'
+          $process = Start-Process $exe -ArgumentList @('--collect', $output, '--duration', '6', '--interval', '1') -PassThru
+          if (-not $process.WaitForExit(20000)) { $process.Kill(); throw 'Backend shutdown timed out' }
+          if ($process.ExitCode -ne 0) { throw 'Backend collection failed' }
+          $sources = Get-Content (Join-Path $output 'telemetry.json') -Raw | ConvertFrom-Json
+          $system = $sources | Where-Object Source -eq 'windows-system'
+          if ($system.Health -ne 'Live') { throw 'Windows system collector is not live' }
+          $ram = $system.Current.Samples | Where-Object MetricKey -eq 'ram.total'
+          $cpu = $system.History | Where-Object { $_.MetricKey -eq 'cpu.usage' -and $null -ne $_.Value }
+          if ($ram.Value -le 0 -or $cpu.Count -lt 1) { throw 'Missing measured CPU/RAM telemetry' }
+          if (-not (Test-Path (Join-Path $output 'telemetry.csv'))) { throw 'Missing CSV export' }
+          Get-Content (Join-Path $output 'telemetry.txt')
       - name: Verify native overview charts and capture fixture screenshots
         shell: pwsh
         run: |

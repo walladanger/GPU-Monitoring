@@ -29,6 +29,29 @@ public static class Program
 {
     [STAThread] public static void Main(string[] args)
     {
+        if (args.Contains("--collect"))
+        {
+            // No Application, Window, tray icon or single-instance UI mutex in collector mode.
+            try
+            {
+                string Value(string name, string? fallback = null)
+                {
+                    int index = Array.IndexOf(args, name);
+                    if (index < 0 && fallback != null) return fallback;
+                    if (index < 0 || index + 1 >= args.Length || args[index + 1].StartsWith("--"))
+                        throw new ArgumentException("Missing value for " + name);
+                    return args[index + 1];
+                }
+                Environment.ExitCode = HeadlessCollector.RunAsync(Value("--collect"),
+                    int.Parse(Value("--duration", "30"), System.Globalization.CultureInfo.InvariantCulture),
+                    int.Parse(Value("--interval", "2"), System.Globalization.CultureInfo.InvariantCulture)).GetAwaiter().GetResult();
+            }
+            catch (Exception error)
+            {
+                System.Diagnostics.Trace.TraceError(error.ToString()); Environment.ExitCode = 2;
+            }
+            return;
+        }
         if (args.Contains("--verify-overview")) { OverviewChecks.Run(); return; }
         if (args.Contains("--self-test"))
         {
