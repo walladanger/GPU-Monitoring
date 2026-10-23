@@ -58,4 +58,5 @@ PlotDataChecks.Run(Check);
 await TelemetrySessionChecks.Run(Check);
 await TelemetryEngineChecks.Run(Check);
 await SystemCollectorChecks.Run(Check);
+await RuntimeMetricsChecks.Run(Check);
 Console.WriteLine($"PASS: {passed} telemetry regression checks (no hardware or WPF required).");

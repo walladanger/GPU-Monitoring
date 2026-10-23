@@ -42,9 +42,17 @@ public static class Program
                         throw new ArgumentException("Missing value for " + name);
                     return args[index + 1];
                 }
+                using var llama = args.Contains("--llama-metrics") ? new RuntimeMetricsCollector(RuntimeMetricsKind.LlamaCpp,
+                    new Uri(Value("--llama-metrics"), UriKind.Absolute)) : null;
+                using var vllm = args.Contains("--vllm-metrics") ? new RuntimeMetricsCollector(RuntimeMetricsKind.Vllm,
+                    new Uri(Value("--vllm-metrics"), UriKind.Absolute)) : null;
+                var runtimes = new List<ITelemetryProvider>();
+                if (llama != null) runtimes.Add(llama);
+                if (vllm != null) runtimes.Add(vllm);
                 Environment.ExitCode = HeadlessCollector.RunAsync(Value("--collect"),
                     int.Parse(Value("--duration", "30"), System.Globalization.CultureInfo.InvariantCulture),
-                    int.Parse(Value("--interval", "2"), System.Globalization.CultureInfo.InvariantCulture)).GetAwaiter().GetResult();
+                    int.Parse(Value("--interval", "2"), System.Globalization.CultureInfo.InvariantCulture),
+                    additionalProviders: runtimes).GetAwaiter().GetResult();
             }
             catch (Exception error)
             {

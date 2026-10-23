@@ -10,13 +10,15 @@ public static class HeadlessCollector
 {
     /// <summary>Finite, window-free collection with bounded histories and local exports.</summary>
     public static async Task<int> RunAsync(string directory, int durationSeconds, int intervalSeconds,
-        CancellationToken cancellation = default)
+        CancellationToken cancellation = default, IEnumerable<ITelemetryProvider>? additionalProviders = null)
     {
         if (durationSeconds is < 1 or > 86400) throw new ArgumentOutOfRangeException(nameof(durationSeconds));
         if (intervalSeconds is < 1 or > 10) throw new ArgumentOutOfRangeException(nameof(intervalSeconds));
         Directory.CreateDirectory(directory);
-        var engine = new TelemetryEngine([new NvidiaCollector(), new WindowsSystemCollector(),
-            new NetworkCollector(), new VolumeCollector()]);
+        var providers = new List<ITelemetryProvider> { new NvidiaCollector(), new WindowsSystemCollector(),
+            new NetworkCollector(), new VolumeCollector() };
+        if (additionalProviders != null) providers.AddRange(additionalProviders);
+        var engine = new TelemetryEngine(providers);
         using var duration = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         duration.CancelAfter(TimeSpan.FromSeconds(durationSeconds));
         try { await engine.RunAsync(TimeSpan.FromSeconds(intervalSeconds), duration.Token); }

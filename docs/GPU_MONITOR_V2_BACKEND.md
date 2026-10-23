@@ -49,7 +49,9 @@ CPU usage uses GetSystemTimes (kernel includes idle), RAM uses GlobalMemoryStatu
 
 ## Remaining backend work
 
-This increment does not complete all 15 phases. Physical-disk discovery/throughput/busy time, per-core samples, physical core topology, privileged temperature/fan sensors, GPU process attribution/NVML, persistent database history, and optional LLM/agent/OTel adapters remain unimplemented. Logical volume capacity is not physical-disk activity. No UI, layout editing or additional chart families are implemented here.
+Optional local llama.cpp/vLLM endpoint collectors are now available through explicit headless flags; see [runtime metric mappings and limits](GPU_MONITOR_V2_RUNTIME_METRICS.md). They add endpoint-wide token totals/rates and request queues to the same engine and exports.
+
+This increment does not complete all 15 phases. Physical-disk discovery/throughput/busy time, per-core samples, physical core topology, privileged temperature/fan sensors, GPU process attribution/NVML, persistent database history, and other LLM/agent/OTel adapters remain unimplemented. Logical volume capacity is not physical-disk activity. No UI, layout editing or additional chart families are implemented here.
 
 ## Verification
 

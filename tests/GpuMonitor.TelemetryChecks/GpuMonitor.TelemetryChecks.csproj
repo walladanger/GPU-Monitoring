@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/GpuMonitor/RuntimeMetricsCollector.cs" Link="RuntimeMetricsCollector.cs" />
     <Compile Include="../../src/GpuMonitor/SystemCollectors.cs" Link="SystemCollectors.cs" />
     <Compile Include="../../src/GpuMonitor/HeadlessCollector.cs" Link="HeadlessCollector.cs" />
     <Compile Include="../../src/GpuMonitor/TelemetryEngine.cs" Link="TelemetryEngine.cs" />
