@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using System.Windows.Interop;
 
 namespace GpuMonitor;
 
@@ -14,6 +15,8 @@ internal static class OverviewChecks
         var output = Path.Combine(AppContext.BaseDirectory, "overview-verification"); Directory.CreateDirectory(output);
         var app = new Application();
         var window = new OverviewWindow(startMonitoring: false) { Left = 0, Top = 0 };
+        var viewportRoot = window.VerificationRoot; window.Content = null;
+        HwndSource? host = null;
         var cases = new[] { (0, 1536), (1, 1536), (2, 1536), (4, 1536), (8, 1536), (2, 760) };
         var now = DateTimeOffset.Parse("2026-10-23T12:00:00Z");
         int index = 0;
@@ -25,7 +28,7 @@ internal static class OverviewChecks
         }
         void ApplyCase()
         {
-            var (count, width) = cases[index]; window.Width = width;
+            var (count, width) = cases[index];
             // The runner's desktop can be smaller than the reference. Lay out a real
             // WPF viewport at the requested dimensions, independently of HWND limits.
             window.VerificationRoot.Width = width; window.VerificationRoot.Height = 1024;
@@ -62,11 +65,12 @@ internal static class OverviewChecks
                     for (int chartIndex = 0; chartIndex < 2; chartIndex++)
                     {
                         var plot = plots[chartIndex];
-                        var plotBitmap = Capture(plot);
-                        int stride = plotBitmap.PixelWidth * 4; var pixels = new byte[stride * plotBitmap.PixelHeight]; plotBitmap.CopyPixels(pixels, stride, 0);
+                        var origin = plot.TranslatePoint(new Point(0, 0), viewport);
+                        int plotWidth = (int)plot.ActualWidth, plotHeight = (int)plot.ActualHeight;
+                        int stride = bitmap.PixelWidth * 4; var pixels = new byte[stride * bitmap.PixelHeight]; bitmap.CopyPixels(pixels, stride, 0);
                         int colored = 0;
-                        for (int y = 16; y < plotBitmap.PixelHeight - 32; y++)
-                            for (int x = 54; x < plotBitmap.PixelWidth - 16; x++)
+                        for (int y = (int)origin.Y + 16; y < Math.Min(bitmap.PixelHeight, origin.Y + plotHeight - 32); y++)
+                            for (int x = (int)origin.X + 54; x < Math.Min(bitmap.PixelWidth, origin.X + plotWidth - 16); x++)
                         {
                             int p = y * stride + x * 4;
                             bool matches = chartIndex == 0 ?
@@ -88,8 +92,23 @@ internal static class OverviewChecks
             catch (Exception error) { Fail(error); }
         };
         app.DispatcherUnhandledException += (_, e) => { e.Handled = true; Fail(e.Exception); };
-        window.Loaded += (_, _) => { try { ApplyCase(); timer.Start(); } catch (Exception error) { Fail(error); } };
+        window.Loaded += (_, _) =>
+        {
+            try
+            {
+                // A top-level Window is constrained by the runner's small desktop.
+                // Host the exact same native view in a fixed-size HWND for viewport QA.
+                var viewport = viewportRoot;
+                viewport.HorizontalAlignment = HorizontalAlignment.Left; viewport.VerticalAlignment = VerticalAlignment.Top;
+                host = new HwndSource(new HwndSourceParameters("GPU Monitor fixture viewport")
+                { Width = 1536, Height = 1024, PositionX = 0, PositionY = 0, WindowStyle = unchecked((int)0x90000000) });
+                host.RootVisual = viewport; window.Hide();
+                ApplyCase(); timer.Start();
+            }
+            catch (Exception error) { Fail(error); }
+        };
         try { app.Run(window); } catch (Exception error) { Fail(error); }
+        finally { host?.Dispose(); }
     }
 
     private static RenderTargetBitmap Capture(FrameworkElement view)
