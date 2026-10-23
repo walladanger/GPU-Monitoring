@@ -59,6 +59,7 @@ public sealed class DiskCollector : ITelemetryProvider, IDisposable
 
     internal static double? BusyFromIdle(double? idle) => idle is >= 0 and <= 100 ? 100 - idle : null;
     internal static double? CounterValue(uint status, double value) => status is 0 or 1 && double.IsFinite(value) && value >= 0 ? value : null;
+    internal static bool IsWarmupStatus(uint status) => status is 0xC0000BBA or 0xC0000BC6 or 0x800007D5;
 
     private static Dictionary<string, double?> ReadValues(IntPtr counter)
     {
@@ -67,7 +68,7 @@ public sealed class DiskCollector : ITelemetryProvider, IDisposable
         {
             uint bytes = 0;
             uint status = PdhGetFormattedCounterArray(counter, 0x8200, ref bytes, out _, IntPtr.Zero);
-            if (status == 0xC0000BC6 || status == 0x800007D5) return result; // warmup/no data
+            if (IsWarmupStatus(status)) return result; // Keep the query alive for its second rate observation.
             if (status != 0x800007D2) Require(status);
             if (bytes == 0) return result;
             if (bytes > 4 * 1024 * 1024) throw new IOException("Physical disk counter response exceeds limit.");
@@ -75,6 +76,7 @@ public sealed class DiskCollector : ITelemetryProvider, IDisposable
             try
             {
                 status = PdhGetFormattedCounterArray(counter, 0x8200, ref bytes, out uint count, buffer);
+                if (IsWarmupStatus(status)) return result;
                 if (status == 0x800007D2) continue; // hotplug changed the required size
                 Require(status);
                 int size = Marshal.SizeOf<CounterItem>();

@@ -6,6 +6,8 @@ internal static class SystemCollectorChecks
 {
     public static async Task Run(Action<bool, string> check)
     {
+        check(DiskCollector.IsWarmupStatus(0xC0000BBA) && DiskCollector.IsWarmupStatus(0xC0000BC6) && !DiskCollector.IsWarmupStatus(0xC0000BB9),
+            "PDH first-sample status retains the query, while missing counters remain errors");
         check(DiskCollector.BusyFromIdle(75) == 25 && DiskCollector.BusyFromIdle(null) == null && DiskCollector.BusyFromIdle(101) == null,
             "Physical disk busy time uses valid idle percentage and preserves unavailable data");
         check(DiskCollector.CounterValue(0, 12345) == 12345 && DiskCollector.CounterValue(1, 0) == 0 &&
