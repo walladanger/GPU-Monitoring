@@ -26,6 +26,12 @@ internal static class PlotDataChecks
         PlotData.WriteCsv(writer, window, "%");
         var lines = writer.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         check(lines.Length == 4 && CsvTelemetry.Fields(lines[1])[3] == d.Name, "Plot CSV exports only visible samples and preserves quoted device names");
+        using var mixed = new StringWriter();
+        PlotData.WriteCsv(mixed, new[] { new PlotExportRow(Sample(0, 2147483648), "B"), new PlotExportRow(Sample(0, 43.25), "%") });
+        var mixedLines = mixed.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        check(CsvTelemetry.Fields(mixedLines[1])[5] == "B" && CsvTelemetry.Fields(mixedLines[1])[6] == "2147483648" &&
+            CsvTelemetry.Fields(mixedLines[2])[5] == "%" && CsvTelemetry.Fields(mixedLines[2])[6] == "43.25",
+            "Mixed-unit CSV preserves each raw value and its own unit without converting to chart display units");
         check(CsvTelemetry.Fields(lines[2])[6] == "" && CsvTelemetry.Fields(lines[3])[6] == "20.125", "Plot CSV preserves gaps and exact numeric data");
     }
 }

@@ -62,6 +62,26 @@ internal static class OverviewTheme
     public static void PlotMenu(TelemetryPlot plot, string rawUnit, string title)
     {
         var menu = Menu();
+        menu.Items.Add(MenuCommand("Zoom in   Ctrl++", () => plot.Zoom(.5)));
+        menu.Items.Add(MenuCommand("Zoom out   Ctrl+-", () => plot.Zoom(2)));
+        menu.Items.Add(MenuCommand("Pan earlier   Ctrl+Left", () => plot.Pan(-.25)));
+        menu.Items.Add(MenuCommand("Pan later   Ctrl+Right", () => plot.Pan(.25)));
+        var pause = MenuCommand("Pause chart view   Ctrl+Space", () => { if (plot.IsViewPaused) plot.ResetView(); else plot.PauseView(); });
+        pause.IsCheckable = true; menu.Items.Add(pause);
+        menu.Items.Add(MenuCommand("Reset to live   Ctrl+Home", plot.ResetView));
+        var visibility = new MenuItem { Header = "Visible series" }; menu.Items.Add(visibility);
+        menu.Opened += (_, _) =>
+        {
+            pause.IsChecked = plot.IsViewPaused; visibility.Items.Clear();
+            for (int index = 0; index < plot.SeriesCount; index++)
+            {
+                int selected = index;
+                var item = MenuCommand(plot.SeriesNames[index], () => plot.ShowSeries(selected, !plot.IsSeriesVisible(selected)));
+                item.IsCheckable = true; item.IsChecked = plot.IsSeriesVisible(index); visibility.Items.Add(item);
+            }
+        };
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MenuCommand("Export chart as PNG…", () => Export("png")));
         menu.Items.Add(MenuCommand("Export visible data as CSV…", () => Export("csv")));
         menu.Items.Add(MenuCommand("Export visible data as JSON…", () => Export("json")));
         plot.ContextMenu = menu;
@@ -71,14 +91,15 @@ internal static class OverviewTheme
             if (dialog.ShowDialog(Window.GetWindow(plot)) != true) return;
             try
             {
-                if (extension == "csv")
+                if (extension == "png") plot.SavePng(dialog.FileName);
+                else if (extension == "csv")
                 {
                     using var writer = new StreamWriter(dialog.FileName);
-                    PlotData.WriteCsv(writer, plot.VisibleSamples, rawUnit);
+                    PlotData.WriteCsv(writer, plot.ExportRows(rawUnit));
                 }
-                else File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(plot.VisibleSamples.Select(s => new
-                { timestamp_utc = s.Time, source = s.Device.Source, device_id = s.Device.Id, device_name = s.Device.Name,
-                    metric = s.MetricKey, unit = rawUnit, value = s.Value }), new JsonSerializerOptions { WriteIndented = true }));
+                else File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(plot.ExportRows(rawUnit).Select(row => new
+                { timestamp_utc = row.Sample.Time, source = row.Sample.Device.Source, device_id = row.Sample.Device.Id, device_name = row.Sample.Device.Name,
+                    metric = row.Sample.MetricKey, unit = row.Unit, value = row.Sample.Value }), new JsonSerializerOptions { WriteIndented = true }));
             }
             catch (Exception error) { MessageBox.Show(Window.GetWindow(plot), error.Message, "Export failed"); }
         }

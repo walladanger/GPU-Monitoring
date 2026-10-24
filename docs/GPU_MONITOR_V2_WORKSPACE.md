@@ -44,3 +44,11 @@ Missing source/device/metric bindings remain in both the editor and saved layout
 The subsequent [panel interaction increment](GPU_MONITOR_V2_PANEL_INTERACTIONS.md) adds title dragging, snapped resize grips, merge/split and duplication while retaining these menu/keyboard controls. Chart pan/zoom, additional chart families and secondary-axis rendering remain later increments; target-machine interaction and visual acceptance are still open.
 
 `--verify-workspace` runs the actual Add Panel modal, search, checkbox and Apply flow in WPF, then exercises chart projection, editing/order/sizing, undo, named save/load, malformed-file preservation and missing/reappearing GPU bindings. It captures `overview-verification/workspace-controls-1536.png` and validates actual colored native chart traces and selected raw sample counts. Data is explicitly synthetic. Existing 0/1/2/4/8-GPU and narrow-view checks still run. These checks are not physical dual-3090 validation or human visual signoff.
+
+## Chart completion continuation
+
+Custom charts now support two unit groups on independent left/right inside axes, with per-series raw units retained in CSV/JSON and display conversion confined to rendering/inspection. The picker assigns new units to free axes and retains saved axes. A third unit requires another panel. Missing-source selections remain unavailable and are never rebound by display index.
+
+Right-click any chart for zoom, pan, view pause/reset, per-series visibility and PNG/CSV/JSON exports. Ctrl+wheel or Ctrl+plus/minus zooms; Ctrl+Left/Right pans; Ctrl+Space freezes/resumes the chart view; Ctrl+Home resets to live. Plain wheel still scrolls the dashboard. Navigation freezes a bounded snapshot while backend sampling continues. Reset picks up the latest collected data. Exports include only visible series and points in the displayed time window, preserving raw values and per-series units. New telemetry does not move a paused view. These view-only controls are not saved into workspace presets.
+
+See [chart verification and acceptance](GPU_MONITOR_V2_CHART_COMPLETION.md). Physical pointer, DPI/monitor and human visual signoff remain target-machine gates.

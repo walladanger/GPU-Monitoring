@@ -105,6 +105,15 @@ jobs:
           $result = Join-Path (Split-Path $exe) 'overview-verification/workspace-result.txt'
           if (Test-Path $result) { Get-Content $result }
           if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Workspace verification failed' }
+      - name: Verify independent chart axes, time navigation and raw exports
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $process = Start-Process $exe -ArgumentList '--verify-charts' -PassThru
+          if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Chart interaction verification timed out' }
+          $result = Join-Path (Split-Path $exe) 'overview-verification/charts-result.txt'
+          if (Test-Path $result) { Get-Content $result }
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Chart interaction verification failed' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

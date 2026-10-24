@@ -127,7 +127,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         };
         menu.Items.Add(merge);
         var split = OverviewTheme.MenuCommand("Split into one panel per sensor", () => Change(() => WorkspaceActions.Split(Layout, id)));
-        split.IsEnabled = panel.Series.Count > 1 && panel.Series.All(s => s.Axis == 0) && Layout.Panels.Count + panel.Series.Count - 1 <= 64;
+        split.IsEnabled = panel.Series.Count > 1 && Layout.Panels.Count + panel.Series.Count - 1 <= 64;
         menu.Items.Add(split);
         menu.Items.Add(OverviewTheme.MenuCommand("Remove panel   Ctrl+Delete", () => Remove(id)));
         return menu;

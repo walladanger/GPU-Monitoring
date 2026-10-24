@@ -27,3 +27,7 @@ Portable production-source checks cover before/after drops and unchanged-drop be
 The existing Windows `--verify-workspace` gate additionally raises the actual title/resize Thumb event routes with deterministic workspace pointer coordinates. It checks drop hit-testing, deferred resize commit, cancellation restoring the visual preview, one-step undo, and the real merge/split/duplicate menu commands. The existing picker, preset dialog/menu, missing/reappearing hardware, native chart traces, screenshots, packaging and installer gates continue to run. The fixture uses synthetic measurements; it does not prove physical pointer behavior on the user's monitors or dual-3090 operation. High-DPI/multi-monitor interaction, visual signoff and performance acceptance remain target-machine checks.
 
 Secondary-axis rendering, graph zoom/pan, broader chart families, persistent telemetry storage and tray hover remain separate production tasks.
+
+## Chart interaction continuation
+
+The [chart completion increment](GPU_MONITOR_V2_CHART_COMPLETION.md) enables two labeled unit groups for comparisons and merges. Merge preserves the target selections' axes and assigns new units only to compatible or free axes; a third unit or unknown source definition is rejected. Split normalizes each resulting single-sensor chart to its own primary axis. The earlier primary-only limits describe the original PR #31 increment.

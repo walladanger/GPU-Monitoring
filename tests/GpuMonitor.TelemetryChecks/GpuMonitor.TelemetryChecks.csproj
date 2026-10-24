@@ -23,6 +23,7 @@
     <Compile Include="../../src/GpuMonitor/SystemCollectors.cs" Link="SystemCollectors.cs" />
     <Compile Include="../../src/GpuMonitor/HeadlessCollector.cs" Link="HeadlessCollector.cs" />
     <Compile Include="../../src/GpuMonitor/TelemetryEngine.cs" Link="TelemetryEngine.cs" />
+    <Compile Include="../../src/GpuMonitor/PlotRange.cs" Link="PlotRange.cs" />
     <Compile Include="../../src/GpuMonitor/PlotData.cs" Link="PlotData.cs" />
     <!-- Compile the production collector/parser directly; no GPU or WPF required. -->
     <Compile Include="../../src/GpuMonitor/Telemetry.cs" Link="Telemetry.cs" />

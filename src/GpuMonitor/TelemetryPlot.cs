@@ -13,7 +13,7 @@ using System.Windows.Shapes;
 namespace GpuMonitor;
 
 /// <summary>Native chart view; the owning session retains the source samples.</summary>
-public sealed class TelemetryPlot : Grid
+public sealed partial class TelemetryPlot : Grid
 {
     private readonly CartesianChart chart;
     private readonly Axis timeAxis;
@@ -25,6 +25,12 @@ public sealed class TelemetryPlot : Grid
     private IReadOnlyList<IReadOnlyList<TelemetrySample>> visible = Array.Empty<IReadOnlyList<TelemetrySample>>();
     private readonly string unit;
     private double divisor = 1;
+    private IReadOnlyList<WorkspaceAxis>? axisDefinitions;
+    private int[] axisAssignments = [];
+    private Axis[] valueAxes = [];
+    private double SeriesDivisor(int index) => axisDefinitions == null ? divisor : axisDefinitions.Single(a => a.Index == axisAssignments[index]).Divisor;
+    private string SeriesUnit(int index) => axisDefinitions == null ? unit : axisDefinitions.Single(a => a.Index == axisAssignments[index]).DisplayUnit;
+
     private double? fixedMaximum;
     private int windowMinutes = 5;
     public event Action<DateTimeOffset?>? CursorMoved;
@@ -32,6 +38,7 @@ public sealed class TelemetryPlot : Grid
     public TelemetryPlot(string unit, double? maximum = null)
     {
         this.unit = unit; fixedMaximum = maximum;
+        Focusable = true;
         timeAxis = new Axis
         {
             TextSize = 10, LabelsPaint = null,
@@ -46,6 +53,7 @@ public sealed class TelemetryPlot : Grid
             SeparatorsPaint = new SolidColorPaint(SKColor.Parse("#213746"), .6f),
             Labeler = value => $"{value:0.#}{unit}"
         };
+        valueAxes = [valueAxis];
         chart = new CartesianChart
         {
             Background = new SolidColorBrush(Color.FromRgb(16, 33, 45)),
@@ -69,11 +77,12 @@ public sealed class TelemetryPlot : Grid
                 DateTimeOffset.FromUnixTimeMilliseconds((long)timeAxis.MaxLimit.Value)));
         };
         chart.MouseLeave += (_, _) => CursorMoved?.Invoke(null);
+        WireNavigation();
     }
 
     public void SetSeries(IReadOnlyList<(string Name, string Color)> definitions, bool? filled = null)
     {
-        series.Clear();
+        series.Clear(); viewRange = null; frozenHistories = null; latestHistories = [];
         foreach (var definition in definitions)
         {
             var color = SKColor.Parse(definition.Color);
@@ -88,23 +97,51 @@ public sealed class TelemetryPlot : Grid
         chart.Series = series.ToArray();
     }
 
+    public void ConfigureAxes(IReadOnlyList<WorkspaceAxis> definitions, IReadOnlyList<int> assignments)
+    {
+        if (definitions.Count is < 1 or > 2 || definitions.Select(a => a.Index).Distinct().Count() != definitions.Count ||
+            definitions.Any(a => a.Index is < 0 or > 1) || assignments.Count != series.Count ||
+            assignments.Any(i => !definitions.Any(a => a.Index == i))) throw new ArgumentException("Invalid chart axes.");
+        axisDefinitions = definitions.ToArray(); axisAssignments = assignments.ToArray();
+        valueAxes = definitions.Select(a => new Axis {
+            MinLimit = 0, MaxLimit = a.Maximum, TextSize = 11, ForceStepToMin = true, SubseparatorsPaint = null,
+            Position = a.Index == 0 ? AxisPosition.Start : AxisPosition.End, LabelsPaint = null,
+            SeparatorsPaint = a.Index == 0 ? new SolidColorPaint(SKColor.Parse("#213746"), .6f) : null
+        }).ToArray();
+        chart.YAxes = valueAxes;
+        for (int i = 0; i < series.Count; i++) series[i].ScalesYAt = Array.FindIndex(definitions.ToArray(), a => a.Index == assignments[i]);
+    }
+
     public void Update(IReadOnlyList<IReadOnlyList<TelemetrySample>> histories,
         DateTimeOffset now, int minutes, double divisor = 1)
     {
         if (histories.Count != series.Count) throw new ArgumentException("Series count does not match histories.");
         if (!double.IsFinite(divisor) || divisor <= 0) throw new ArgumentOutOfRangeException(nameof(divisor));
-        var start = now.AddMinutes(-minutes);
+        if (minutes <= 0 || minutes > 30) throw new ArgumentOutOfRangeException(nameof(minutes));
         this.divisor = divisor; windowMinutes = minutes;
-        visible = histories.Select(h => PlotData.Window(h, now, minutes)).ToArray();
-        timeAxis.MinLimit = start.ToUnixTimeMilliseconds();
-        timeAxis.MaxLimit = now.ToUnixTimeMilliseconds();
-        timeAxis.MinStep = minutes * 60000d / (minutes == 1 ? 6 : 5);
-        valueAxis.MaxLimit = fixedMaximum ?? Math.Max(1, (visible.SelectMany(s => s).Max(s => s.Value / divisor) ?? 1) * 1.1);
-        valueAxis.MinStep = valueAxis.MaxLimit.Value / 2;
+        latestHistories = histories; latestTime = now;
+        RenderView();
+    }
+
+    private void RenderView()
+    {
+        var range = viewRange ?? new PlotRange(latestTime.AddMinutes(-windowMinutes), latestTime);
+        var histories = frozenHistories ?? latestHistories;
+        visible = histories.Select(h => (IReadOnlyList<TelemetrySample>)h.Where(s => s.Time >= range.Start && s.Time <= range.End).ToArray()).ToArray();
+        timeAxis.MinLimit = range.Start.ToUnixTimeMilliseconds();
+        timeAxis.MaxLimit = range.End.ToUnixTimeMilliseconds();
+        timeAxis.MinStep = range.Duration.TotalMilliseconds / (range.Duration.TotalMinutes <= 1 ? 6 : 5);
+        for (int axis = 0; axis < valueAxes.Length; axis++)
+        {
+            var samples = visible.SelectMany((h, i) => series[i].IsVisible && (axisDefinitions == null || series[i].ScalesYAt == axis) ? h.Select(s => s.Value / SeriesDivisor(i)) : []);
+            valueAxes[axis].MaxLimit = (axisDefinitions == null ? fixedMaximum : axisDefinitions[axis].Maximum) ?? Math.Max(1, (samples.Max() ?? 1) * 1.1);
+            valueAxes[axis].MinStep = valueAxes[axis].MaxLimit!.Value / 2;
+        }
         for (int i = 0; i < series.Count; i++)
             series[i].Values = visible[i]
-                .Select(s => new ObservablePoint(s.Time.ToUnixTimeMilliseconds(), s.Value / divisor)).ToArray();
+                .Select(s => new ObservablePoint(s.Time.ToUnixTimeMilliseconds(), s.Value / SeriesDivisor(i))).ToArray();
         RefreshScales();
+        RefreshViewState();
     }
 
     public void SetCursor(DateTimeOffset? time)
@@ -118,9 +155,9 @@ public sealed class TelemetryPlot : Grid
         cursor.Y1 = 8; cursor.Y2 = Math.Max(8, ActualHeight - 24); cursor.Visibility = Visibility.Visible;
         inspection.Text = string.Join("\n", visible.Select((samples, i) =>
         {
-            var sample = PlotData.Nearest(samples, time.Value);
+            var sample = series[i].IsVisible ? PlotData.Nearest(samples, time.Value) : null;
             return sample == null ? "" : $"{series[i].Name} · {sample.Time.ToLocalTime():HH:mm:ss.fff} · " +
-                (sample.Value is double value ? $"{value / divisor:R} {unit}" : "N/A");
+                (sample.Value is double value ? $"{value / SeriesDivisor(i):R} {SeriesUnit(i)}" : "N/A");
         }));
     }
 
@@ -128,25 +165,37 @@ public sealed class TelemetryPlot : Grid
     {
         scales.Children.Clear();
         if (ActualWidth < 60 || ActualHeight < 40) return;
-        double maximum = valueAxis.MaxLimit ?? Math.Max(1, visible.SelectMany(s => s).Max(s => s.Value / divisor) ?? 1);
-        for (int i = 0; i < 3; i++)
+        for (int axis = 0; axis < valueAxes.Length; axis++)
         {
-            var label = OverviewTheme.Text($"{maximum * (2 - i) / 2:0.#}{unit}", 10, OverviewTheme.Muted);
-            label.Opacity = .8; Canvas.SetLeft(label, 6); Canvas.SetTop(label, Math.Min(ActualHeight - 38, Math.Max(8, 3 + i * (ActualHeight - 32) / 2))); scales.Children.Add(label);
+            double maximum = valueAxes[axis].MaxLimit ?? 1;
+            string suffix = axisDefinitions == null ? unit : axisDefinitions[axis].DisplayUnit;
+            bool right = axisDefinitions != null && axisDefinitions[axis].Index == 1;
+            for (int i = 0; i < 3; i++)
+            {
+                var label = OverviewTheme.Text($"{maximum * (2 - i) / 2:0.#}{suffix}", 10, OverviewTheme.Muted);
+                label.Opacity = .8;
+                if (right) Canvas.SetRight(label, 6); else Canvas.SetLeft(label, 6);
+                Canvas.SetTop(label, Math.Min(ActualHeight - 38, Math.Max(8, 3 + i * (ActualHeight - 32) / 2))); scales.Children.Add(label);
+            }
         }
         if (timeAxis.MinLimit == null || timeAxis.MaxLimit == null) return;
-        int intervals = windowMinutes == 1 ? 6 : 5;
+        double span = timeAxis.MinLimit.HasValue && timeAxis.MaxLimit.HasValue ? timeAxis.MaxLimit.Value - timeAxis.MinLimit.Value : windowMinutes * 60000d;
+        int intervals = span <= 60000 ? 6 : 5;
         for (int i = 0; i <= intervals; i++)
         {
             double fraction = (double)i / intervals;
             var time = DateTimeOffset.FromUnixTimeMilliseconds((long)(timeAxis.MinLimit.Value + fraction * (timeAxis.MaxLimit.Value - timeAxis.MinLimit.Value)));
-            var label = OverviewTheme.Text(time.ToLocalTime().ToString(windowMinutes == 1 ? "HH:mm:ss" : "HH:mm"), 10, OverviewTheme.Muted);
+            var label = OverviewTheme.Text(time.ToLocalTime().ToString(span < 300000 ? "HH:mm:ss" : "HH:mm"), 10, OverviewTheme.Muted);
             Canvas.SetLeft(label, Math.Clamp(4 + fraction * (ActualWidth - 8) - 15, 4, ActualWidth - 35));
             Canvas.SetTop(label, ActualHeight - 18); scales.Children.Add(label);
         }
     }
 
-    public IReadOnlyList<TelemetrySample> VisibleSamples => visible.SelectMany(s => s).OrderBy(s => s.Time).ToArray();
+    public IReadOnlyList<TelemetrySample> VisibleSamples => visible.Where((_, i) => series[i].IsVisible).SelectMany(s => s).OrderBy(s => s.Time).ToArray();
+
+    public IReadOnlyList<PlotExportRow> ExportRows(string fallbackUnit) => visible.SelectMany((samples, i) => (series[i].IsVisible ? samples : []).Select(s =>
+        new PlotExportRow(s, axisDefinitions == null ? fallbackUnit : axisDefinitions.Single(a => a.Index == axisAssignments[i]).RawUnit)))
+        .OrderBy(r => r.Sample.Time).ToArray();
 
     public int SeriesCount => series.Count;
     public void SetMaximum(double? maximum) { fixedMaximum = maximum; valueAxis.MaxLimit = maximum; RefreshScales(); }

@@ -31,12 +31,12 @@ public static class WorkspaceActions
         if (sourceId == targetId) throw new ArgumentException("Choose two different panels to merge.");
         var source = Find(layout, sourceId); var target = Find(layout, targetId);
         var series = target.Series.Concat(source.Series).DistinctBy(s => (s.Source, s.DeviceId, s.MetricKey)).ToArray();
-        if (source.Series.Concat(target.Series).Any(s => s.Axis != 0)) throw new FormatException("Merge currently supports primary-axis panels only.");
         if (series.Length > 16) throw new FormatException("A merged panel can contain at most 16 distinct sensors.");
         var merged = target with { Series = series, WidthSlots = Math.Min(4, source.WidthSlots + target.WidthSlots), HeightRows = Math.Max(source.HeightRows, target.HeightRows) };
         var resolved = WorkspaceResolver.Resolve(new(1, "Merge validation", [merged]), sources).Single();
         if (resolved.Series.Any(s => s.Unit == null)) throw new FormatException("Connect the sources so their units can be checked before merging.");
-        if (resolved.AxisError != null) throw new FormatException(resolved.AxisError);
+        var choices = resolved.Series.Select(s => new WorkspaceMetricChoice(s.Selection, "", "", "", s.Unit!, s.State)).ToArray();
+        merged = merged with { Series = WorkspaceMetrics.AssignAxes(choices, target.Series) };
         return Checked(layout, layout.Panels.Where(p => p.Id != sourceId).Select(p => p.Id == targetId ? merged : p));
     }
 
@@ -44,11 +44,10 @@ public static class WorkspaceActions
     {
         WorkspacePresetStore.Validate(layout); var panel = Find(layout, id);
         if (panel.Series.Count < 2) throw new FormatException("This panel has only one sensor.");
-        if (panel.Series.Any(s => s.Axis != 0)) throw new FormatException("Split currently supports primary-axis panels only.");
         if (layout.Panels.Count + panel.Series.Count - 1 > 64) throw new FormatException("Splitting would exceed the 64-panel limit.");
         var pieces = panel.Series.Select((series, index) => panel with {
             Id = index == 0 ? panel.Id : Guid.NewGuid().ToString("N"), WidthSlots = 1,
-            Title = Short(panel.Title + " · " + series.MetricKey), Series = new[] { series } }).ToArray();
+            Title = Short(panel.Title + " · " + series.MetricKey), Series = new[] { series with { Axis = 0 } } }).ToArray();
         return Checked(layout, layout.Panels.SelectMany(p => p.Id == id ? pieces : new[] { p }));
     }
 
