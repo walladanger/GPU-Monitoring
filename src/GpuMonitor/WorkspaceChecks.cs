@@ -128,6 +128,12 @@ internal static class WorkspaceChecks
                 if (workspace.Visibility != Visibility.Visible) throw new InvalidOperationException("Loading a preset did not reveal its panels immediately.");
                 await Dispatcher.Yield(DispatcherPriority.ContextIdle);
                 viewport.Measure(new Size(1536, 1600)); viewport.Arrange(new Rect(0, 0, 1536, 1600)); viewport.UpdateLayout();
+                var keyboardPlot = workspace.FindCard(gpu.Id).Plot!;
+                keyboardPlot.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount, System.Windows.Input.MouseButton.Left)
+                    { RoutedEvent = System.Windows.Input.Mouse.PreviewMouseDownEvent });
+                keyboardPlot.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount, System.Windows.Input.MouseButton.Left)
+                    { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
+                if (!keyboardPlot.IsKeyboardFocused) throw new InvalidOperationException("Clicking a custom chart lost its keyboard navigation focus to the panel.");
                 var moving = workspace.FindCard(gpu.Id).TitleHandle;
                 var originalPointer = workspace.PointerPosition;
                 var pointer = workspace.PanelPoint(gpu.Id);
