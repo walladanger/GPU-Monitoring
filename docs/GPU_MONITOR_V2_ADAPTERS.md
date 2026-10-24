@@ -105,3 +105,17 @@ Official contracts used:
 - https://docs.ag-ui.com/spec/1.0/basic
 - https://opentelemetry.io/docs/specs/otel/protocol/file-exporter/
 - https://opentelemetry.io/docs/specs/otel/metrics/data-model/
+
+## llama.cpp on the shared runtime adapter
+
+`Kind: llamacpp` / `RuntimeMetricsCollector.CreateLlamaCpp()` uses the same bounded HTTP transport, source-scoped identities, counter-reset handling and retained history as SGLang/vLLM. Default: `http://127.0.0.1:8080/metrics`. The server must already be started with `--metrics`. The packaged `config/llamacpp.sources.json` enables only this runtime when explicitly selected. See `config/llama.cpp-README.txt` for the exact collection command.
+
+Mapped official families: `llamacpp:prompt_tokens_total`, `llamacpp:tokens_predicted_total`, `llamacpp:requests_processing`, `llamacpp:requests_deferred`. Normalized keys remain `tokens.prompt`, `tokens.output`, `requests.running`, `requests.waiting`; cumulative counters additionally expose `.rate` in tokens/s. These are interval rates, not per-request decode speeds. No cache ratio or latency histogram is fabricated. Labels remain separate rather than aggregated across workers.
+
+This reconciles the useful llama.cpp contract from sibling PR #23 without replacing the newer parser, SGLang/vLLM mappings or configuration. The older branch's `llm.*` keys and endpoint-wide aggregation are not a second API in this build. Neither PR is automatically merged or closed.
+
+Configuration currently rejects all URL query parameters. The current upstream router-mode metrics endpoint requires a model query, so this adapter supports standalone model servers rather than claiming router-mode compatibility. An OpenAI-compatible LM Studio address does not itself expose these metrics. Actual deployment/driver validation remains separate from loopback HTTP fixture tests.
+
+Official exporter contract: https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md#get-metrics-prometheus-compatible-metrics-exporter
+
+Source-time rate arithmetic subtracts integer ticks before conversion to floating point. A deterministic regression sweeps 256 offsets at epoch-sized timestamps; this avoids timestamp rounding distorting a one-second rate. Loopback coverage includes llama.cpp alongside SGLang and vLLM, including warmup, source failure, reconnection and missing measurements.

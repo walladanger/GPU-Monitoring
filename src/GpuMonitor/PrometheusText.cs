@@ -80,7 +80,10 @@ public sealed class CumulativeRate(double ticksPerSecond)
         if (old.HasValue && tick <= old.Value.Tick && epoch == old.Value.Epoch) return null;
         previous = (value.Value, tick, epoch);
         if (old == null || epoch != old.Value.Epoch || value < old.Value.Value || tick <= old.Value.Tick) return null;
-        double rate = (value.Value - old.Value.Value) / (tick - (double)old.Value.Tick) * ticksPerSecond;
+        // Subtract as integers before converting: epoch ticks exceed double's exact
+        // integer range, so converting each timestamp first loses sub-interval precision.
+        ulong elapsedTicks = unchecked((ulong)tick - (ulong)old.Value.Tick);
+        double rate = (value.Value - old.Value.Value) / elapsedTicks * ticksPerSecond;
         return double.IsFinite(rate) && rate >= 0 ? rate : null;
     }
 }

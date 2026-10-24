@@ -43,6 +43,7 @@ jobs:
           ./src/GpuMonitor/packaging/Build-Package.ps1
           if (-not (Test-Path 'src/GpuMonitor/publish/config/sglang-vllm.sources.json')) { throw 'Packaged SGLang/vLLM preset missing' }
           if (-not (Test-Path 'src/GpuMonitor/publish/config/SGLang-vLLM-README.txt')) { throw 'Packaged adapter instructions missing' }
+          if (-not (Test-Path 'src/GpuMonitor/publish/config/llamacpp.sources.json')) { throw 'Packaged llama.cpp preset missing' }
       - name: Verify backend collection without a dashboard
         shell: pwsh
         run: |
