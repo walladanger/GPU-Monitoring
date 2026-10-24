@@ -4,6 +4,15 @@ internal static class PlotDataChecks
 {
     public static void Run(Action<bool, string> check)
     {
+        var start = DateTimeOffset.Parse("2026-10-24T12:00:00Z");
+        check(PlotData.CursorTime(.5, start, start.AddMinutes(5)) == start.AddSeconds(150) &&
+            PlotData.CursorTime(0, start, start.AddMinutes(5)) == start &&
+            PlotData.CursorTime(1, start, start.AddMinutes(5)) == start.AddMinutes(5),
+            "Cursor maps explicit chart time limits without accessing an uninitialized native chart scale");
+        check(PlotData.CursorTime(double.NaN, start, start.AddMinutes(5)) == null &&
+            PlotData.CursorTime(-.1, start, start.AddMinutes(5)) == null &&
+            PlotData.CursorTime(1.1, start, start.AddMinutes(5)) == null && PlotData.CursorTime(.5, start, start) == null,
+            "Cursor rejects out-of-bounds positions and degenerate time windows");
         var now = DateTimeOffset.Parse("2026-10-23T12:00:00Z");
         var d = new DeviceIdentity("nvidia-smi", "GPU-A", DeviceKind.Gpu, "NVIDIA, \"Test\"", "0");
         TelemetrySample Sample(int seconds, double? value) => new(d, "utilization.gpu", now.AddSeconds(seconds), value);
