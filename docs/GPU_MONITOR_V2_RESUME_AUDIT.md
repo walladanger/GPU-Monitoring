@@ -57,11 +57,16 @@ Added opt-in `windows-cpu-cores` backend provider for master 08.02, configured w
 
 Portable checks now total 160; the updated Release cross-build must also pass. Windows CI additionally requires actual native per-logical-CPU samples and their appearance in headless exports. Target dual-3090 validation and human design acceptance remain open.
 
+## Continuation — 2026-10-24
+
+- [PR #26](https://github.com/walladanger/GPU-Monitoring/pull/26) reconciles llama.cpp into the shared runtime collector and fixes epoch-tick rate precision. Its Windows run 40090277759 passed; 166 portable checks passed at that increment.
+- [PR #27](https://github.com/walladanger/GPU-Monitoring/pull/27) connects Overview to the independent engine, adds serialized pause/rescan/shutdown and explicit GUI source configuration, while preserving styling and the default NVIDIA-only source choice. Windows run 40091075676 passed, including actual WPF lifecycle and installer checks; 178 portable checks pass. The earlier statement that Overview is disconnected from the engine describes the original audit baseline, not this newer branch.
+- The versioned workspace contract, named atomic JSON presets and missing-hardware binding resolver are implemented as the next Phase 06 foundation. See [workspace scope and API](GPU_MONITOR_V2_WORKSPACE.md). This is not yet a visible panel editor. The cumulative portable suite passes 194 checks; Release cross-build has zero warnings/errors. Native CI for the workspace increment is recorded on its PR.
+
 Next increments:
 
-1. Reconcile #23's llama.cpp adapter with the current runtime API without dropping SGLang/vLLM mappings.
-2. Connect engine snapshots to a dashboard presentation boundary, preserving the approved styling and independent source health.
-3. Implement versioned workspace layout data, hardware-change recovery, then the annotated panel interactions with native screenshot review.
-4. Complete advanced chart interactions/families, persistence and tray hover under their existing phase IDs.
+1. Connect the workspace contract to the annotated metric picker and panel region, retaining unavailable selections and per-source health.
+2. Implement panel reorder/resize/merge and keyboard alternatives with native screenshot comparison and required visual signoff.
+3. Complete advanced chart families, persistence and tray hover under their existing phase IDs.
 
-No release milestone is declared complete by this audit.
+No release milestone is declared complete by this audit. The PRs are stacked and remain unmerged; physical dual-3090 validation and visual signoff remain open.
