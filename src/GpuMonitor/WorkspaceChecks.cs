@@ -133,7 +133,7 @@ internal static class WorkspaceChecks
                     { RoutedEvent = System.Windows.Input.Mouse.PreviewMouseDownEvent });
                 keyboardPlot.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount, System.Windows.Input.MouseButton.Left)
                     { RoutedEvent = System.Windows.Input.Mouse.MouseDownEvent });
-                if (!keyboardPlot.IsKeyboardFocused) throw new InvalidOperationException("Clicking a custom chart lost its keyboard navigation focus to the panel.");
+                if (!keyboardPlot.IsKeyboardFocused) throw new InvalidOperationException("Clicking a custom chart lost its keyboard navigation focus. Focus is " + System.Windows.Input.Keyboard.FocusedElement?.GetType().Name);
                 var moving = workspace.FindCard(gpu.Id).TitleHandle;
                 var originalPointer = workspace.PointerPosition;
                 var pointer = workspace.PanelPoint(gpu.Id);
