@@ -1,6 +1,8 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace GpuMonitor;
 
@@ -64,6 +66,12 @@ internal sealed partial class MonitoringWorkspace
         foreach (var card in cards.Values) card.BorderBrush = OverviewTheme.Border;
         dropId = null;
         if (movingId != sourceId || !double.IsFinite(point.X) || !double.IsFinite(point.Y)) return;
+        for (DependencyObject? parent = panels; parent != null; parent = VisualTreeHelper.GetParent(parent))
+            if (parent is ScrollViewer viewport)
+            {
+                if (!new Rect(0, 0, viewport.ActualWidth, viewport.ActualHeight).Contains(panels.TranslatePoint(point, viewport))) return;
+                break;
+            }
         foreach (var panel in Layout.Panels)
         {
             if (panel.Id == sourceId) continue;
@@ -87,6 +95,7 @@ internal sealed partial class MonitoringWorkspace
         { System.Windows.MessageBox.Show(Window.GetWindow(this), error.Message, "Panel change could not be applied"); }
     }
     internal WorkspaceChartCard FindCard(string id) => cards[id];
+    internal string DropDiagnostics => $"source={movingId}; target={dropId}; after={dropAfter}; delta={moveX},{moveY}";
     internal Point PanelPoint(string id, double verticalFraction = .25)
     {
         var card = cards[id]; var origin = card.TranslatePoint(new Point(), panels);

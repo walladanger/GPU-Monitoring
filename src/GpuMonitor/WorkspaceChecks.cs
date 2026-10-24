@@ -123,6 +123,7 @@ internal static class WorkspaceChecks
                 while (!workspace.IsEnabled) await Task.Delay(10, filesDeadline.Token);
                 if (workspace.PanelCount != 2 || workspace.Layout.Panels.Single(p => p.Id == gpu.Id).WidthSlots != 2)
                     throw new InvalidOperationException("Named preset did not restore edited panel dimensions.");
+                await Dispatcher.Yield(DispatcherPriority.ContextIdle);
                 viewport.Measure(new Size(1536, 1600)); viewport.Arrange(new Rect(0, 0, 1536, 1600)); viewport.UpdateLayout();
                 var moving = workspace.FindCard(gpu.Id).TitleHandle;
                 var originalPointer = workspace.PointerPosition;
@@ -131,8 +132,20 @@ internal static class WorkspaceChecks
                 moving.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
                 pointer = workspace.PanelPoint("cpu-panel", .25);
                 moving.RaiseEvent(new DragDeltaEventArgs(10, 10) { RoutedEvent = Thumb.DragDeltaEvent });
+                var dropDiagnostics = workspace.DropDiagnostics + $"; pointer={pointer}; source size={workspace.FindCard(gpu.Id).RenderSize}; target size={workspace.FindCard("cpu-panel").RenderSize}";
                 moving.RaiseEvent(new DragCompletedEventArgs(10, 10, false) { RoutedEvent = Thumb.DragCompletedEvent });
-                if (workspace.Layout.Panels[0].Id != gpu.Id) throw new InvalidOperationException("Native title-handle drop did not reorder the panel.");
+                if (workspace.Layout.Panels[0].Id != gpu.Id) throw new InvalidOperationException("Native title-handle drop did not reorder the panel. " + dropDiagnostics);
+                workspace.PutPanel(gpu with { Id = "offscreen-fixture", HeightRows = 8 });
+                await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+                viewport.UpdateLayout();
+                var beforeOutside = workspace.Layout;
+                moving = workspace.FindCard(gpu.Id).TitleHandle; pointer = workspace.PanelPoint(gpu.Id);
+                moving.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+                pointer = workspace.PanelPoint("offscreen-fixture", .75);
+                moving.RaiseEvent(new DragDeltaEventArgs(10, 10) { RoutedEvent = Thumb.DragDeltaEvent });
+                moving.RaiseEvent(new DragCompletedEventArgs(10, 10, false) { RoutedEvent = Thumb.DragCompletedEvent });
+                if (!ReferenceEquals(beforeOutside, workspace.Layout)) throw new InvalidOperationException("A drop outside the visible viewport targeted an invisible panel.");
+                workspace.Remove("offscreen-fixture");
                 var grip = workspace.FindCard("cpu-panel").ResizeGrip;
                 grip.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent }); pointer += new Vector(0, 100); grip.RaiseEvent(new DragDeltaEventArgs(0, 100) { RoutedEvent = Thumb.DragDeltaEvent });
                 if (workspace.Layout.Panels.Single(p => p.Id == "cpu-panel").HeightRows != 2) throw new InvalidOperationException("Resize preview committed before completion.");
