@@ -60,11 +60,12 @@ internal sealed class MonitoringWorkspace : StackPanel
             card.MouseLeftButtonDown += (_, _) => card.Focus();
             card.PreviewKeyDown += (_, e) =>
             {
-                if (Keyboard.Modifiers == ModifierKeys.Alt && e.Key is Key.Up or Key.Down)
-                { Move(panel.Id, e.Key == Key.Up ? -1 : 1); e.Handled = true; }
-                else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Delete)
+                var key = e.Key == Key.System ? e.SystemKey : e.Key;
+                if (Keyboard.Modifiers == ModifierKeys.Alt && key is Key.Up or Key.Down)
+                { Move(panel.Id, key == Key.Up ? -1 : 1); e.Handled = true; }
+                else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.Delete)
                 { Remove(panel.Id); e.Handled = true; }
-                else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.E)
+                else if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.E)
                 { Edit(panel); e.Handled = true; }
             };
             cards[panel.Id] = card; panels.Children.Add(card);

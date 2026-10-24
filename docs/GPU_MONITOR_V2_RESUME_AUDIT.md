@@ -63,10 +63,14 @@ Portable checks now total 160; the updated Release cross-build must also pass. W
 - [PR #27](https://github.com/walladanger/GPU-Monitoring/pull/27) connects Overview to the independent engine, adds serialized pause/rescan/shutdown and explicit GUI source configuration, while preserving styling and the default NVIDIA-only source choice. Windows run 40091075676 passed, including actual WPF lifecycle and installer checks; 178 portable checks pass. The earlier statement that Overview is disconnected from the engine describes the original audit baseline, not this newer branch.
 - The versioned workspace contract, named atomic JSON presets and missing-hardware binding resolver are implemented as the next Phase 06 foundation. See [workspace scope and API](GPU_MONITOR_V2_WORKSPACE.md). This is not yet a visible panel editor. The cumulative portable suite passes 194 checks; Release cross-build has zero warnings/errors. Native CI for the workspace increment is recorded on its PR.
 
+### Native workspace controls
+
+[PR #29](https://github.com/walladanger/GPU-Monitoring/pull/29) connects the workspace contract to a searchable native metric picker, real same-unit line/area charts, explicit source/device availability, menu/keyboard order and sizing, undo, and named preset save/load. The new Custom panels region sits below the primary GPU cards. Existing GPU palette/card styling is preserved; adding controls/panels increases scroll height. All 203 portable checks and the Release cross-build pass. Windows evidence and native screenshot artifacts are recorded on the PR; the new native gate exercises actual picker and preset dialog/menu controls.
+
 Next increments:
 
-1. Connect the workspace contract to the annotated metric picker and panel region, retaining unavailable selections and per-source health.
-2. Implement panel reorder/resize/merge and keyboard alternatives with native screenshot comparison and required visual signoff.
-3. Complete advanced chart families, persistence and tray hover under their existing phase IDs.
+1. Add mouse drag handles/resize grips and merge/split, retaining the menu/keyboard alternatives and missing bindings.
+2. Implement correctly labeled secondary axes and complete visual comparison/signoff for the new workspace states.
+3. Complete advanced chart families, persistent history and tray hover under their existing phase IDs.
 
 No release milestone is declared complete by this audit. The PRs are stacked and remain unmerged; physical dual-3090 validation and visual signoff remain open.
