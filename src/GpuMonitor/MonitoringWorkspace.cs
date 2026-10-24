@@ -62,7 +62,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         {
             var card = new WorkspaceChartCard(panel, () => OpenPanelMenu(panel.Id)) { Focusable = true };
             card.CursorMoved += value => CursorMoved?.Invoke(value);
-            card.MouseLeftButtonDown += (_, _) => card.Focus();
+            card.MouseLeftButtonDown += (_, _) => { if (!card.IsKeyboardFocusWithin) card.Focus(); };
             card.PreviewKeyDown += (_, e) =>
             {
                 var key = e.Key == Key.System ? e.SystemKey : e.Key;
