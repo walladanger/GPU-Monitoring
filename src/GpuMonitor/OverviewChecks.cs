@@ -111,7 +111,7 @@ internal static class OverviewChecks
         finally { host?.Dispose(); }
     }
 
-    private static RenderTargetBitmap Capture(FrameworkElement view)
+    internal static RenderTargetBitmap Capture(FrameworkElement view)
     {
         var bitmap = new RenderTargetBitmap((int)view.ActualWidth, (int)view.ActualHeight, 96, 96, PixelFormats.Pbgra32);
         var drawing = new DrawingVisual();

@@ -54,6 +54,10 @@ public sealed class WorkspacePresetStore(string directory)
         return Path.Combine(root, id + ".json");
     }
 
+    public IReadOnlyList<string> ListPresets() => !Directory.Exists(root) ? [] :
+        Array.AsReadOnly(Directory.EnumerateFiles(root, "*.json").Take(256).Select(Path.GetFileNameWithoutExtension)
+            .Where(Identifier).Select(id => id!).Take(64).OrderBy(id => id, StringComparer.Ordinal).ToArray());
+
     public static void Validate(WorkspaceLayout layout)
     {
         if (layout == null || layout.Version != 1 || !Text(layout.Name, 80) || layout.Panels == null || layout.Panels.Count > 64)

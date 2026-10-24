@@ -13,6 +13,8 @@ public sealed class OverviewWindow : Window
 {
     private readonly TelemetrySession fixtureSession = new(new NvidiaCollector());
     private readonly DashboardTelemetry? monitoring;
+    private readonly MonitoringWorkspace customWorkspace;
+    private IReadOnlyList<ProviderSnapshot>? workspaceFixtures;
     private readonly Grid root;
     private readonly Dictionary<string, GpuOverviewCard> cards = [];
     private readonly Dictionary<string, string> deviceColors = [];
@@ -35,7 +37,7 @@ public sealed class OverviewWindow : Window
     private readonly List<Button> rangeButtons = [];
     private static readonly string[] Colors = ["#2B82F8", "#A66CF2", "#33DF32", "#FFBA4D", "#F45A5A", "#39BCD2", "#DBCE32", "#E977BD"];
 
-    public OverviewWindow(bool startMonitoring = true, CollectorConfiguration? configuration = null, DashboardTelemetry? telemetry = null)
+    public OverviewWindow(bool startMonitoring = true, CollectorConfiguration? configuration = null, DashboardTelemetry? telemetry = null, string? workspaceDirectory = null)
     {
         settings = startMonitoring ? Settings.Load() : new Settings(); savePreferences = startMonitoring;
         Title = "GPU Monitor"; Width = 1536; Height = 1024; MinWidth = 680; MinHeight = 540;
@@ -59,6 +61,7 @@ public sealed class OverviewWindow : Window
         }
         controls.Children.Add(OverviewTheme.Text("GPU Overview", 21)); body.Children.Add(controls);
         empty.Margin = new(0, 30, 0, 30); body.Children.Add(empty); body.Children.Add(gpuGrid);
+        customWorkspace = new(WorkspaceSources, workspaceDirectory); customWorkspace.CursorMoved += SetCursor; body.Children.Add(customWorkspace);
         var comparisonContent = new StackPanel(); comparisonContent.Children.Add(OverviewTheme.Text("GPU utilization comparison", 16));
         comparisonContent.Children.Add(comparison); comparisonContent.Children.Add(legend);
         var compareCard = OverviewTheme.Card(comparisonContent); compareCard.Margin = new(0, 0, 14, 14); body.Children.Add(compareCard);
@@ -169,9 +172,8 @@ public sealed class OverviewWindow : Window
     private void Render(DateTimeOffset now)
     {
         if (now == default) now = DateTimeOffset.UtcNow; viewTime = now;
-        var session = monitoring?.Snapshot(NvidiaTelemetry.SourceId).Single() ?? new ProviderSnapshot(
-            NvidiaTelemetry.SourceId, fixtureSession.Health, fixtureSession.Error, fixtureSession.LastSuccess,
-            fixtureSession.Current, fixtureSession.HistorySnapshot(), fixtureSession.Definitions);
+        var snapshots = customWorkspace.PanelCount > 0 ? WorkspaceSources() : null;
+        var session = snapshots?.Single(s => s.Source == NvidiaTelemetry.SourceId) ?? monitoring?.Snapshot(NvidiaTelemetry.SourceId).Single() ?? FixtureSnapshot();
         var readings = session.Current == null ? Array.Empty<GpuReading>() : NvidiaSnapshot.Readings(session.Current).ToArray();
         var ids = readings.Select(g => g.Id).ToHashSet();
         foreach (var id in cards.Keys.Where(id => !ids.Contains(id)).ToArray()) { gpuGrid.Children.Remove(cards[id]); cards.Remove(id); deviceColors.Remove(id); }
@@ -210,6 +212,7 @@ public sealed class OverviewWindow : Window
         empty.Text = session.Health == ProviderHealth.Starting ? "Discovering NVIDIA GPUs…" : session.Health == ProviderHealth.Stale ? "NVIDIA telemetry unavailable. Check the driver; retrying automatically." : "No NVIDIA GPUs detected.";
         summary.Text = collapsed ? $"{readings.Length} GPUs" : $"{readings.Length} GPUs detected\nLast update  {session.LastSuccess?.ToLocalTime():HH:mm:ss}\n{(paused ? "Paused" : session.Health.ToString())}";
         foreach (var button in rangeButtons) button.Background = (int)button.Tag == settings.WindowMinutes ? OverviewTheme.Brush("#184880") : OverviewTheme.Surface;
+        customWorkspace.Refresh(snapshots ?? [], now, settings.WindowMinutes);
         Reflow();
     }
     private void Reflow()
@@ -218,7 +221,10 @@ public sealed class OverviewWindow : Window
         int columns = Math.Min(Math.Max(1, cards.Count), Math.Max(1, (int)Math.Floor(width / 500)));
         foreach (var card in cards.Values) card.Width = Math.Max(280, width / columns - 14);
     }
-    private void SetCursor(DateTimeOffset? time) { comparison.SetCursor(time); foreach (var card in cards.Values) foreach (var plot in card.Plots) plot.SetCursor(time); }
+    private void SetCursor(DateTimeOffset? time) { comparison.SetCursor(time); foreach (var card in cards.Values) foreach (var plot in card.Plots) plot.SetCursor(time); customWorkspace.SetCursor(time); }
+    private ProviderSnapshot FixtureSnapshot() => new(NvidiaTelemetry.SourceId, fixtureSession.Health, fixtureSession.Error,
+        fixtureSession.LastSuccess, fixtureSession.Current, fixtureSession.HistorySnapshot(), fixtureSession.Definitions);
+    private IReadOnlyList<ProviderSnapshot> WorkspaceSources() => monitoring?.Snapshot() ?? workspaceFixtures ?? [FixtureSnapshot()];
 
     internal void ApplyFixture(IReadOnlyList<GpuReading> readings, DateTimeOffset now, bool render = true)
     { fixtureSession.Apply(NvidiaTelemetry.Normalize(readings), now); if (render) Render(now); }
@@ -231,4 +237,10 @@ public sealed class OverviewWindow : Window
     internal int VerificationDeviceCount => cards.Count;
     internal async Task VerifyPauseAsync(bool value) { paused = value; await UpdateMonitoringAsync(); }
     internal Task VerifyRescanAsync() => RefreshAsync();
+    internal MonitoringWorkspace VerifyWorkspace => customWorkspace;
+    internal void SetWorkspaceFixtures(IReadOnlyList<ProviderSnapshot> snapshots, DateTimeOffset now)
+    {
+        if (savePreferences) throw new InvalidOperationException("Workspace fixtures require a non-collecting verification window.");
+        workspaceFixtures = snapshots; Render(now);
+    }
 }

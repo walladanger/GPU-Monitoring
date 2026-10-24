@@ -14,6 +14,7 @@ internal static class WorkspaceLayoutChecks
         try
         {
             await store.SaveAsync("dual-3090", layout);
+            check(store.ListPresets().SequenceEqual(new[] { "dual-3090" }), "Preset menus discover validated saved names from the explicit local directory");
             var restored = await store.LoadAsync("dual-3090");
             check(restored.Panels.Select(p => p.Id).SequenceEqual(new[] { "gpu-a", "gpu-b" }) &&
                 restored.Panels[0].WidthSlots == 2 && restored.Panels[0].HeightRows == 3 && restored.Panels[0].Series.Single() == selection,

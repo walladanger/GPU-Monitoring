@@ -86,6 +86,15 @@ jobs:
           $result = Join-Path (Split-Path $exe) 'monitoring-verification.txt'
           if (Test-Path $result) { Get-Content $result }
           if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Dashboard engine verification failed' }
+      - name: Verify native workspace controls and preset recovery
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $process = Start-Process $exe -ArgumentList '--verify-workspace' -PassThru
+          if (-not $process.WaitForExit(45000)) { $process.Kill(); throw 'Workspace verification timed out' }
+          $result = Join-Path (Split-Path $exe) 'overview-verification/workspace-result.txt'
+          if (Test-Path $result) { Get-Content $result }
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Workspace verification failed' }
       - name: Verify native overview charts and capture fixture screenshots
         shell: pwsh
         run: |

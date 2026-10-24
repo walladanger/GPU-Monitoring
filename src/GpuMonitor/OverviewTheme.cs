@@ -10,6 +10,14 @@ namespace GpuMonitor;
 
 internal static class OverviewTheme
 {
+    public static TextBlock DialogHeading(Window window)
+    {
+        window.WindowStyle = WindowStyle.None;
+        System.Windows.Shell.WindowChrome.SetWindowChrome(window, new System.Windows.Shell.WindowChrome
+        { CaptionHeight = 0, ResizeBorderThickness = new(6), GlassFrameThickness = new(0), CornerRadius = new(0) });
+        var heading = Text(window.Title, 20); heading.Margin = new(0, 0, 0, 14);
+        heading.MouseLeftButtonDown += (_, _) => window.DragMove(); return heading;
+    }
     public static Brush Brush(string hex) => new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
     public static readonly Brush Canvas = Brush("#10171D"), Surface = Brush("#171E27"), Border = Brush("#262E37"),
         Muted = Brush("#A5AEB7"), Green = Brush("#33DF32"), Blue = Brush("#2B82F8");

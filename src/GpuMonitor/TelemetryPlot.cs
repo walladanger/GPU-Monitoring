@@ -68,7 +68,7 @@ public sealed class TelemetryPlot : Grid
         chart.MouseLeave += (_, _) => CursorMoved?.Invoke(null);
     }
 
-    public void SetSeries(IReadOnlyList<(string Name, string Color)> definitions)
+    public void SetSeries(IReadOnlyList<(string Name, string Color)> definitions, bool? filled = null)
     {
         series.Clear();
         foreach (var definition in definitions)
@@ -79,7 +79,7 @@ public sealed class TelemetryPlot : Grid
                 Name = definition.Name, Values = Array.Empty<ObservablePoint>(),
                 GeometrySize = 0, LineSmoothness = 0,
                 Stroke = new SolidColorPaint(color, 1.6f),
-                Fill = definitions.Count == 1 ? new SolidColorPaint(color.WithAlpha(24)) : null
+                Fill = (filled ?? definitions.Count == 1) ? new SolidColorPaint(color.WithAlpha(24)) : null
             });
         }
         chart.Series = series.ToArray();
