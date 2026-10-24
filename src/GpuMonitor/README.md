@@ -16,7 +16,7 @@ The v2 development branch opens the new native Overview with larger LiveCharts2
 GPU/VRAM plots, synchronized inspection and a GPU comparison. Use `--legacy-ui`
 to open the earlier dashboard. The new view remains subject to visual signoff;
 see `docs/GPU_MONITOR_V2_OVERVIEW.md` in the repository for scope and limits.
-Right-click an Overview graph to export its visible samples as CSV or JSON.
+Right-click an Overview graph to export its visible samples as CSV or JSON. Collection now runs independently of rendering, with pause/rescan and awaited shutdown. An explicit `--sources <configuration.json>` enables the configured backend sources; extra hardware/runtime panels remain planned. Normal launch retains NVIDIA-only collection.
 
 - All-GPU and per-GPU views
 - 1, 2, 5 or 10 second refresh intervals
