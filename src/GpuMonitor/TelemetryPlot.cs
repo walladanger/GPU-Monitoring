@@ -25,21 +25,23 @@ public sealed class TelemetryPlot : Grid
     private IReadOnlyList<IReadOnlyList<TelemetrySample>> visible = Array.Empty<IReadOnlyList<TelemetrySample>>();
     private readonly string unit;
     private double divisor = 1;
+    private double? fixedMaximum;
+    private int windowMinutes = 5;
     public event Action<DateTimeOffset?>? CursorMoved;
 
     public TelemetryPlot(string unit, double? maximum = null)
     {
-        this.unit = unit;
+        this.unit = unit; fixedMaximum = maximum;
         timeAxis = new Axis
         {
             TextSize = 10, LabelsPaint = null,
             SeparatorsPaint = new SolidColorPaint(SKColor.Parse("#213746"), .6f),
             Labeler = value => DateTimeOffset.FromUnixTimeMilliseconds((long)value).ToLocalTime().ToString("HH:mm:ss"),
-            UnitWidth = 1000, MinStep = 1000
+            UnitWidth = 1000, MinStep = 60000, ForceStepToMin = true, SubseparatorsPaint = null
         };
         valueAxis = new Axis
         {
-            MinLimit = 0, MaxLimit = maximum, TextSize = 11,
+            MinLimit = 0, MaxLimit = maximum, TextSize = 11, ForceStepToMin = true, SubseparatorsPaint = null,
             LabelsPaint = null,
             SeparatorsPaint = new SolidColorPaint(SKColor.Parse("#213746"), .6f),
             Labeler = value => $"{value:0.#}{unit}"
@@ -80,7 +82,7 @@ public sealed class TelemetryPlot : Grid
                 Name = definition.Name, Values = Array.Empty<ObservablePoint>(),
                 GeometrySize = 0, LineSmoothness = 0,
                 Stroke = new SolidColorPaint(color, 1.4f),
-                Fill = (filled ?? definitions.Count == 1) ? new SolidColorPaint(color.WithAlpha(30)) : null
+                Fill = (filled ?? definitions.Count == 1) ? new LinearGradientPaint(color.WithAlpha(60), color.WithAlpha(0), new SKPoint(0, 0), new SKPoint(0, 1)) : null
             });
         }
         chart.Series = series.ToArray();
@@ -92,10 +94,13 @@ public sealed class TelemetryPlot : Grid
         if (histories.Count != series.Count) throw new ArgumentException("Series count does not match histories.");
         if (!double.IsFinite(divisor) || divisor <= 0) throw new ArgumentOutOfRangeException(nameof(divisor));
         var start = now.AddMinutes(-minutes);
-        this.divisor = divisor;
+        this.divisor = divisor; windowMinutes = minutes;
         visible = histories.Select(h => PlotData.Window(h, now, minutes)).ToArray();
         timeAxis.MinLimit = start.ToUnixTimeMilliseconds();
         timeAxis.MaxLimit = now.ToUnixTimeMilliseconds();
+        timeAxis.MinStep = minutes * 60000d / (minutes == 1 ? 6 : 5);
+        valueAxis.MaxLimit = fixedMaximum ?? Math.Max(1, (visible.SelectMany(s => s).Max(s => s.Value / divisor) ?? 1) * 1.1);
+        valueAxis.MinStep = valueAxis.MaxLimit.Value / 2;
         for (int i = 0; i < series.Count; i++)
             series[i].Values = visible[i]
                 .Select(s => new ObservablePoint(s.Time.ToUnixTimeMilliseconds(), s.Value / divisor)).ToArray();
@@ -130,12 +135,12 @@ public sealed class TelemetryPlot : Grid
             label.Opacity = .8; Canvas.SetLeft(label, 6); Canvas.SetTop(label, Math.Min(ActualHeight - 38, Math.Max(8, 3 + i * (ActualHeight - 32) / 2))); scales.Children.Add(label);
         }
         if (timeAxis.MinLimit == null || timeAxis.MaxLimit == null) return;
-        int intervals = ActualWidth >= 500 ? 6 : 4;
+        int intervals = windowMinutes == 1 ? 6 : 5;
         for (int i = 0; i <= intervals; i++)
         {
             double fraction = (double)i / intervals;
             var time = DateTimeOffset.FromUnixTimeMilliseconds((long)(timeAxis.MinLimit.Value + fraction * (timeAxis.MaxLimit.Value - timeAxis.MinLimit.Value)));
-            var label = OverviewTheme.Text(time.ToLocalTime().ToString("HH:mm"), 10, OverviewTheme.Muted);
+            var label = OverviewTheme.Text(time.ToLocalTime().ToString(windowMinutes == 1 ? "HH:mm:ss" : "HH:mm"), 10, OverviewTheme.Muted);
             Canvas.SetLeft(label, Math.Clamp(4 + fraction * (ActualWidth - 8) - 15, 4, ActualWidth - 35));
             Canvas.SetTop(label, ActualHeight - 18); scales.Children.Add(label);
         }
@@ -144,6 +149,6 @@ public sealed class TelemetryPlot : Grid
     public IReadOnlyList<TelemetrySample> VisibleSamples => visible.SelectMany(s => s).OrderBy(s => s.Time).ToArray();
 
     public int SeriesCount => series.Count;
-    public void SetMaximum(double? maximum) { valueAxis.MaxLimit = maximum; RefreshScales(); }
+    public void SetMaximum(double? maximum) { fixedMaximum = maximum; valueAxis.MaxLimit = maximum; RefreshScales(); }
     public void SetName(int index, string name) => series[index].Name = name;
 }

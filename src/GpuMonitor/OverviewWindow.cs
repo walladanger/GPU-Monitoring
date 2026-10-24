@@ -131,7 +131,7 @@ public sealed class OverviewWindow : Window
         navigation.Margin = new(0, 14, 0, 0);
         Add("\uE80F", "Overview", () => { details = false; BuildNavigation(); Render(viewTime); }, !details);
         Add("\uE7F4", "GPU Details", () => { details = true; BuildNavigation(); Render(viewTime); }, details);
-        Add("\uE8A5", "Processes", () => customWorkspace.OpenPicker("Process"), false);
+        Add("\uE71D", "Processes", () => customWorkspace.OpenPicker("Process"), false);
         Add("\uE9D9", "System", () => hardwareRow.BringIntoView(), false);
         Add("\uE713", "Settings", OpenSettings, false);
         void Add(string glyph, string label, Action action, bool selected)

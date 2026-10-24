@@ -6,8 +6,8 @@ namespace GpuMonitor;
 
 internal sealed class GpuOverviewCard : Border
 {
-    private readonly TextBlock title = OverviewTheme.Text("", 18), model = OverviewTheme.Text("", 12, OverviewTheme.Muted);
-    private readonly TextBlock usageValue = OverviewTheme.Text("N/A", 20, OverviewTheme.Green), memoryValue = OverviewTheme.Text("N/A", 17, OverviewTheme.Blue);
+    private readonly TextBlock title = OverviewTheme.Text("", 18), model = OverviewTheme.Text("", 13, OverviewTheme.Muted);
+    private readonly TextBlock usageValue = OverviewTheme.Text("N/A", 20, OverviewTheme.Green), memoryValue = OverviewTheme.Text("N/A", 20, OverviewTheme.Blue);
     private readonly TextBlock memoryAmount = OverviewTheme.Text("", 12, OverviewTheme.Muted);
     private readonly TextBlock power = OverviewTheme.Text("N/A", 15), temp = OverviewTheme.Text("N/A", 15), fan = OverviewTheme.Text("N/A", 15);
     private readonly TextBlock details = OverviewTheme.Text("", 12, OverviewTheme.Muted);
@@ -19,6 +19,7 @@ internal sealed class GpuOverviewCard : Border
     {
         Background = OverviewTheme.Surface; BorderBrush = OverviewTheme.Border; BorderThickness = new(1);
         CornerRadius = new(9); Padding = new(16); Margin = new(0, 0, 14, 14);
+        title.FontWeight = FontWeights.SemiBold;
         var content = new StackPanel(); Child = content;
         var heading = new DockPanel { Margin = new(0, 0, 0, 12) };
         var dot = OverviewTheme.Text("●", 16, OverviewTheme.Green); dot.Margin = new(0, 0, 8, 0); heading.Children.Add(dot);
@@ -47,7 +48,7 @@ internal sealed class GpuOverviewCard : Border
     }
     public void Update(GpuReading gpu, ProviderSnapshot session, int minutes, DateTimeOffset now, bool showDetails)
     {
-        title.Text = $"GPU {gpu.Index}"; model.Text = gpu.Name.Replace("NVIDIA GeForce ", "");
+        title.Text = $"GPU {gpu.Index}"; model.Text = gpu.Name;
         static string Value(double? value, string unit) => value.HasValue ? $"{value:0.#}{unit}" : "N/A";
         usageValue.Text = Value(gpu.Metrics["utilization.gpu"], "%");
         memoryValue.Text = gpu.Metrics["memory.total"] is > 0 ? Value(gpu.Metrics["memory.used"] / gpu.Metrics["memory.total"] * 100, "%") : "N/A";
