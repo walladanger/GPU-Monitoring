@@ -1,6 +1,7 @@
 {
   "Version": 1,
   "CollectProcesses": true,
+  "CollectCpuCores": false,
   "Runtimes": [
     { "Enabled": false, "Id": "sglang-local", "Kind": "sglang", "Endpoint": "http://127.0.0.1:30000/metrics" },
     { "Enabled": false, "Id": "vllm-local", "Kind": "vllm", "Endpoint": "http://127.0.0.1:8000/metrics" }

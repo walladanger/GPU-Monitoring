@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/GpuMonitor/CpuCoreCollector.cs" Link="CpuCoreCollector.cs" />
     <Compile Include="../../src/GpuMonitor/CollectorConfiguration.cs" Link="CollectorConfiguration.cs" />
     <Compile Include="../../src/GpuMonitor/OtlpMetadataDecoder.cs" Link="OtlpMetadataDecoder.cs" />
     <Compile Include="../../src/GpuMonitor/JsonlTelemetryProvider.cs" Link="JsonlTelemetryProvider.cs" />

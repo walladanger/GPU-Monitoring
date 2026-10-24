@@ -51,8 +51,22 @@ CPU usage uses GetSystemTimes (kernel includes idle), RAM uses GlobalMemoryStatu
 
 ## Remaining backend work
 
-This does not complete all 15 phases. Per-core samples, physical core topology, privileged temperature/fan sensors, a direct NVML adapter, persistent database history and a dedicated private ForgeCore protocol remain outside this implementation. Disk throughput, readable system-process monitoring, NVIDIA compute-process VRAM and optional Prometheus/AG-UI/usage/OTel file adapters are implemented as documented in the adapter guide. Logical volume capacity is not physical-disk activity. No UI, layout editing or additional chart families are implemented here.
+This does not complete all 15 phases. Physical core topology, privileged temperature/fan sensors, a direct NVML adapter, persistent database history and a dedicated private ForgeCore protocol remain outside this implementation. Disk throughput, readable system-process monitoring, NVIDIA compute-process VRAM and optional Prometheus/AG-UI/usage/OTel file adapters are implemented as documented in the adapter guide. Logical volume capacity is not physical-disk activity. No UI, layout editing or additional chart families are implemented here.
 
 ## Verification
 
 Portable regression checks cover existing GPU parser/session behavior plus independent source polling, blocked/failing-source isolation, cancellation, duplicate engine start, counter warmup/reset/rates, CPU arithmetic, and raw JSON/CSV/TXT export. Windows CI additionally runs six seconds of real headless collection and requires actual RAM and CPU samples before packaging acceptance. A Windows runner has no substitute for validating the user's dual-RTX3090 machine.
+
+## Optional logical CPU measurements
+
+Set `"CollectCpuCores": true` in the existing `--sources` JSON configuration to enable the independent `windows-cpu-cores` provider. It is disabled by default. It reads the local Windows `Processor Information(*)\% Processor Time` performance counter and emits `cpu.core.usage` in percent for actual logical processors only. It does not open another window, alter the dashboard or require a GPU/LLM service.
+
+Identities use the OS processor group and logical index (`group-0-cpu-0`), not enumeration order. Group/system aggregate counter instances are excluded. These are logical processors, not physical cores or a physical-core topology map. Busy time is not frequency-adjusted processor utility and may differ from Task Manager's displayed CPU figure. The existing total CPU metric is unchanged.
+
+PDH rate counters need two observations; first reads and invalid data remain absent rather than fabricated zeroes. Failure closes only this provider's query; the engine retains its existing stale/gap handling and retries with a fresh query. Normal engine cancellation is awaited before disposing the provider. Unsupported Windows counter installations report source failure without stopping RAM, GPU or network polling. No counter repair, privilege elevation or system configuration command is executed.
+
+Each logical CPU series retains at most 900 samples and 30 minutes, whichever is reached first (15 minutes at one-second sampling). Native responses are bounded to 4 MiB / 8192 instances and normalized inventory to 4096 logical processors. CSV/JSON exports use the existing backend export path and include source/device identity, actual timestamp, unit definitions and unavailable values.
+
+Regression checks cover group identity, aggregates, invalid percentages, missing data, removal, configuration, cancellation and disposal. Windows CI also reads real counters after warmup and checks headless exports. Portable fixture tests and Linux cross-compilation alone do not prove Windows PDH runtime behavior.
+
+Official API contracts: [formatted wildcard arrays](https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhgetformattedcounterarrayw), [English counter paths](https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhaddenglishcounterw), and [performance counter collection](https://learn.microsoft.com/en-us/windows/win32/perfctrs/collecting-performance-data).
