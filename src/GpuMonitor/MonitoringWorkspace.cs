@@ -20,6 +20,7 @@ internal sealed class MonitoringWorkspace : StackPanel
     public IEnumerable<TelemetryPlot> Plots => cards.Values.Select(c => c.Plot).OfType<TelemetryPlot>();
     public event Action<DateTimeOffset?>? CursorMoved;
     internal System.Windows.Controls.Button AddButton { get; }
+    internal System.Windows.Controls.Button PresetsButton { get; }
 
     public MonitoringWorkspace(Func<IReadOnlyList<ProviderSnapshot>> sources, string? presetDirectory = null)
     {
@@ -28,7 +29,8 @@ internal sealed class MonitoringWorkspace : StackPanel
         var heading = new DockPanel { Margin = new(0, 0, 14, 12) };
         var actions = new StackPanel { Orientation = Orientation.Horizontal };
         AddButton = OverviewTheme.Command("Add panel", () => Edit(null)); actions.Children.Add(AddButton);
-        actions.Children.Add(OverviewTheme.Command("Presets", OpenPresets)); DockPanel.SetDock(actions, Dock.Right); heading.Children.Add(actions);
+        PresetsButton = OverviewTheme.Command("Presets", OpenPresets); actions.Children.Add(PresetsButton);
+        DockPanel.SetDock(actions, Dock.Right); heading.Children.Add(actions);
         heading.Children.Add(OverviewTheme.Text("Custom panels", 16)); Children.Add(heading); Children.Add(panels);
         panels.SizeChanged += (_, _) => Reflow();
     }
@@ -137,7 +139,7 @@ internal sealed class MonitoringWorkspace : StackPanel
         menu.Items.Add(load);
         var undo = OverviewTheme.MenuCommand("Undo last panel change", Undo); undo.IsEnabled = previous != null; menu.Items.Add(undo);
         menu.Items.Add(OverviewTheme.MenuCommand("Clear custom panels", () => ApplyLayout(Layout with { Panels = [] })));
-        menu.PlacementTarget = this; menu.IsOpen = true;
+        PresetsButton.ContextMenu = menu; menu.PlacementTarget = PresetsButton; menu.IsOpen = true;
     }
     private async Task FileAction(Func<Task> action)
     {

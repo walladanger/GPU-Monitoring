@@ -87,10 +87,39 @@ internal static class WorkspaceChecks
                 workspace.Move("cpu-panel", -1);
                 if (workspace.Layout.Panels[0].Id != "cpu-panel") throw new InvalidOperationException("Panel reorder failed.");
                 workspace.PutPanel(gpu with { Title = "Selected GPU usage", WidthSlots = 2, HeightRows = 1 });
-                await workspace.SavePresetAsync("fixture-layout");
+                workspace.PresetsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                var presetMenu = workspace.PresetsButton.ContextMenu!; presetMenu.IsOpen = false;
+                Exception? nameError = null;
+                var driveName = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+                driveName.Tick += (_, _) =>
+                {
+                    var dialog = app.Windows.OfType<Window>().FirstOrDefault(w => w.Title == "Save workspace preset" && w.IsLoaded);
+                    if (dialog == null) return;
+                    driveName.Stop();
+                    try
+                    {
+                        var form = (StackPanel)dialog.Content;
+                        form.Children.OfType<TextBox>().Single().Text = "fixture-layout";
+                        form.Children.OfType<StackPanel>().Single().Children.OfType<System.Windows.Controls.Button>()
+                            .Single(button => (string)button.Content == "Save").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                    }
+                    catch (Exception error) { nameError = error; dialog.Close(); }
+                };
+                driveName.Start();
+                presetMenu.Items.OfType<MenuItem>().First(item => ((string)item.Header).StartsWith("Save named", StringComparison.Ordinal))
+                    .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                driveName.Stop(); if (nameError != null) throw nameError;
+                using var filesDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                while (!workspace.IsEnabled) await Task.Delay(10, filesDeadline.Token);
+                if (!File.Exists(Path.Combine(directory, "fixture-layout.json"))) throw new InvalidOperationException("Preset Save dialog did not save its named workspace.");
                 workspace.Remove(gpu.Id); workspace.Undo();
                 if (workspace.PanelCount != 2) throw new InvalidOperationException("Undo did not restore the removed panel.");
-                workspace.ApplyLayout(new(1, "Empty", [])); await workspace.LoadPresetAsync("fixture-layout");
+                workspace.ApplyLayout(new(1, "Empty", []));
+                workspace.PresetsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                presetMenu = workspace.PresetsButton.ContextMenu!; presetMenu.IsOpen = false;
+                presetMenu.Items.OfType<MenuItem>().Single(item => (string)item.Header == "Load preset").Items.OfType<MenuItem>()
+                    .Single(item => (string)item.Header == "fixture-layout").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                while (!workspace.IsEnabled) await Task.Delay(10, filesDeadline.Token);
                 if (workspace.PanelCount != 2 || workspace.Layout.Panels.Single(p => p.Id == gpu.Id).WidthSlots != 2)
                     throw new InvalidOperationException("Named preset did not restore edited panel dimensions.");
                 await File.WriteAllTextAsync(Path.Combine(directory, "bad.json"), "{bad");
