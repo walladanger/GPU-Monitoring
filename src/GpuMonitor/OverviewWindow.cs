@@ -59,6 +59,7 @@ public sealed class OverviewWindow : Window
         hardwareRow.Children.Add(cpuCard); hardwareRow.Children.Add(diskCard); body.Children.Add(hardwareRow);
         cpuCard.Plot.CursorMoved += SetCursor; diskCard.Plot.CursorMoved += SetCursor;
         customWorkspace = new(WorkspaceSources, workspaceDirectory); customWorkspace.CursorMoved += SetCursor; body.Children.Add(customWorkspace);
+        customWorkspace.LayoutChanged += () => customWorkspace.Visibility = customWorkspace.PanelCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         var comparisonContent = new StackPanel();
         var comparisonHeading = new DockPanel { Margin = new(0, 0, 0, 8) };
         var ranges = new StackPanel { Orientation = Orientation.Horizontal }; DockPanel.SetDock(ranges, Dock.Right); comparisonHeading.Children.Add(ranges);

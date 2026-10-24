@@ -83,6 +83,7 @@ internal static class WorkspaceChecks
                 drivePicker.Start(); workspace.AddButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent)); drivePicker.Stop();
                 if (pickerError != null) throw pickerError;
                 if (workspace.PanelCount != 1) throw new InvalidOperationException("Add Panel did not commit a measured sensor selection.");
+                if (workspace.Visibility != Visibility.Visible) throw new InvalidOperationException("Adding a panel did not reveal the workspace immediately.");
                 var gpu = workspace.Layout.Panels.Single();
                 workspace.PutPanel(new("cpu-panel", "CPU usage", 1, 2, "area", [new("windows-system", "cpu-total", "cpu.usage")]));
                 workspace.Move("cpu-panel", -1);
@@ -116,6 +117,7 @@ internal static class WorkspaceChecks
                 workspace.Remove(gpu.Id); workspace.Undo();
                 if (workspace.PanelCount != 2) throw new InvalidOperationException("Undo did not restore the removed panel.");
                 workspace.ApplyLayout(new(1, "Empty", []));
+                if (workspace.Visibility != Visibility.Collapsed) throw new InvalidOperationException("Clearing the workspace did not hide its empty region.");
                 workspace.PresetsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 presetMenu = workspace.PresetsButton.ContextMenu!; presetMenu.IsOpen = false;
                 presetMenu.Items.OfType<MenuItem>().Single(item => (string)item.Header == "Load preset").Items.OfType<MenuItem>()
@@ -123,6 +125,7 @@ internal static class WorkspaceChecks
                 while (!workspace.IsEnabled) await Task.Delay(10, filesDeadline.Token);
                 if (workspace.PanelCount != 2 || workspace.Layout.Panels.Single(p => p.Id == gpu.Id).WidthSlots != 2)
                     throw new InvalidOperationException("Named preset did not restore edited panel dimensions.");
+                if (workspace.Visibility != Visibility.Visible) throw new InvalidOperationException("Loading a preset did not reveal its panels immediately.");
                 await Dispatcher.Yield(DispatcherPriority.ContextIdle);
                 viewport.Measure(new Size(1536, 1600)); viewport.Arrange(new Rect(0, 0, 1536, 1600)); viewport.UpdateLayout();
                 var moving = workspace.FindCard(gpu.Id).TitleHandle;

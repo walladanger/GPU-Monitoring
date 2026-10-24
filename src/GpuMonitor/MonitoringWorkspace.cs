@@ -19,6 +19,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     public int PanelCount => Layout.Panels.Count;
     public IEnumerable<TelemetryPlot> Plots => cards.Values.Select(c => c.Plot).OfType<TelemetryPlot>();
     public event Action<DateTimeOffset?>? CursorMoved;
+    public event Action? LayoutChanged;
     internal System.Windows.Controls.Button AddButton { get; }
     internal System.Windows.Controls.Button PresetsButton { get; }
     internal Func<Point> PointerPosition { get; set; }
@@ -77,7 +78,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
             card.ContextMenu = PanelMenu(panel.Id);
         }
         AddButton.IsEnabled = layout.Panels.Count < 64;
-        Refresh(sources(), time, minutes); Reflow();
+        Refresh(sources(), time, minutes); Reflow(); LayoutChanged?.Invoke();
     }
 
     internal void Remove(string id) => ApplyLayout(Layout with { Panels = Layout.Panels.Where(p => p.Id != id).ToArray() });
