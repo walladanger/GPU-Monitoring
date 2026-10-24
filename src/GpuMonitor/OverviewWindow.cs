@@ -9,7 +9,7 @@ using Button = System.Windows.Controls.Button;
 
 namespace GpuMonitor;
 
-public sealed class OverviewWindow : Window
+public sealed partial class OverviewWindow : Window
 {
     private readonly TelemetrySession fixtureSession = new(new NvidiaCollector());
     private readonly DashboardTelemetry? monitoring;
@@ -40,9 +40,10 @@ public sealed class OverviewWindow : Window
     private readonly List<Button> rangeButtons = [];
     private static readonly string[] Colors = ["#2B82F8", "#A66CF2", "#33DF32", "#FFBA4D", "#F45A5A", "#39BCD2", "#DBCE32", "#E977BD"];
 
-    public OverviewWindow(bool startMonitoring = true, CollectorConfiguration? configuration = null, DashboardTelemetry? telemetry = null, string? workspaceDirectory = null)
+    public OverviewWindow(bool startMonitoring = true, CollectorConfiguration? configuration = null, DashboardTelemetry? telemetry = null, string? workspaceDirectory = null, string? historyDirectory = null, Settings? preferences = null)
     {
-        settings = startMonitoring ? Settings.Load() : new Settings(); savePreferences = startMonitoring;
+        settings = preferences ?? (startMonitoring ? Settings.Load() : new Settings()); settings.Normalize(); savePreferences = startMonitoring && preferences == null;
+        historyPath = historyDirectory == null ? Settings.HistoryPath : Path.Combine(historyDirectory, "telemetry.sqlite");
         Title = "GPU Monitor"; Width = 1536; Height = 1024; MinWidth = 680; MinHeight = 540;
         Background = OverviewTheme.Canvas; Foreground = Brushes.White; FontFamily = new("Segoe UI");
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.CanResize;
@@ -84,7 +85,11 @@ public sealed class OverviewWindow : Window
             var menu = new System.Windows.Forms.ContextMenuStrip(); menu.Items.Add("Open GPU Monitor", null, (_, _) => Dispatcher.Invoke(Restore));
             menu.Items.Add("Exit", null, (_, _) => Dispatcher.Invoke(Close)); tray.ContextMenuStrip = menu;
             tray.DoubleClick += (_, _) => Dispatcher.Invoke(Restore);
-            Loaded += async (_, _) => await UpdateMonitoringAsync();
+            Loaded += async (_, _) =>
+            {
+                if (settings.HistoryEnabled) await ConfigureHistoryRecordingAsync(true, settings.HistoryDays);
+                await UpdateMonitoringAsync();
+            };
         }
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized && settings.MinimizeToTray) Hide(); };
         Closing += async (_, e) =>
@@ -151,6 +156,10 @@ public sealed class OverviewWindow : Window
         var menu = OverviewTheme.Menu();
         menu.Items.Add(OverviewTheme.MenuCommand("Add monitoring panel…", () => customWorkspace.OpenPicker()));
         menu.Items.Add(OverviewTheme.MenuCommand("Workspace presets…", () => customWorkspace.PresetsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))));
+        menu.Items.Add(OverviewTheme.MenuCommand("Persistent history…", OpenHistorySettings));
+        menu.Items.Add(OverviewTheme.MenuCommand("Browse saved history…", OpenStoredHistory));
+        if (monitoring?.HistoryStatus is { Requested: true } archive && (archive.Error != null || archive.DroppedBatches > 0))
+            menu.Items.Add(new MenuItem { Header = archive.Error == null ? $"History: {archive.DroppedBatches} dropped batches" : "History unavailable: " + archive.Error, IsEnabled = false });
         menu.Items.Add(OverviewTheme.MenuCommand(paused ? "Resume monitoring" : "Pause monitoring", async () =>
         { paused = !paused; await UpdateMonitoringAsync(); }));
         menu.Items.Add(OverviewTheme.MenuCommand("Rescan now", async () => await RefreshAsync()));

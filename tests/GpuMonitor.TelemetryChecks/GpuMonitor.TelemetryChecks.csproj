@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="[10.0.13]" />
+    <Compile Include="../../src/GpuMonitor/Settings.cs" Link="Settings.cs" />
+    <Compile Include="../../src/GpuMonitor/HistoryRecorder.cs" Link="HistoryRecorder.cs" />
+    <Compile Include="../../src/GpuMonitor/HistoryStore.cs" Link="HistoryStore.cs" />
     <Compile Include="../../src/GpuMonitor/WorkspaceActions.cs" Link="WorkspaceActions.cs" />
     <Compile Include="../../src/GpuMonitor/WorkspaceMetrics.cs" Link="WorkspaceMetrics.cs" />
     <Compile Include="../../src/GpuMonitor/WorkspaceLayout.cs" Link="WorkspaceLayout.cs" />
