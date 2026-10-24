@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -45,7 +46,7 @@ internal static class WorkspaceChecks
                 }
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
                 using (var stream = File.Create(Path.Combine(output, "workspace-controls-1536.png"))) encoder.Save(stream);
-                File.WriteAllText(Path.Combine(output, "workspace-result.txt"), "PASS: Actual Add Panel modal/search/checkbox/Apply, measured GPU and CPU charts, menu-backed edits/order/sizing, undo, named preset save/load, malformed preset preservation and missing/reappearing GPU bindings. Native screenshot uses synthetic fixtures; no hardware or visual signoff claim.");
+                File.WriteAllText(Path.Combine(output, "workspace-result.txt"), "PASS: Actual Add Panel modal/search/checkbox/Apply, measured GPU and CPU charts, title-handle events with deterministic drop hit-testing, resize preview/cancel/commit, merge/split/duplicate menus, undo, named preset save/load, malformed preset preservation and missing/reappearing GPU bindings. Native screenshot uses synthetic fixtures; no hardware or visual signoff claim.");
                 window.Close();
             }
             catch (Exception error) { Fail(error); }
@@ -122,6 +123,40 @@ internal static class WorkspaceChecks
                 while (!workspace.IsEnabled) await Task.Delay(10, filesDeadline.Token);
                 if (workspace.PanelCount != 2 || workspace.Layout.Panels.Single(p => p.Id == gpu.Id).WidthSlots != 2)
                     throw new InvalidOperationException("Named preset did not restore edited panel dimensions.");
+                viewport.Measure(new Size(1536, 1600)); viewport.Arrange(new Rect(0, 0, 1536, 1600)); viewport.UpdateLayout();
+                var moving = workspace.FindCard(gpu.Id).TitleHandle;
+                var originalPointer = workspace.PointerPosition;
+                var pointer = workspace.PanelPoint(gpu.Id);
+                workspace.PointerPosition = () => pointer;
+                moving.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+                pointer = workspace.PanelPoint("cpu-panel", .25);
+                moving.RaiseEvent(new DragDeltaEventArgs(10, 10) { RoutedEvent = Thumb.DragDeltaEvent });
+                moving.RaiseEvent(new DragCompletedEventArgs(10, 10, false) { RoutedEvent = Thumb.DragCompletedEvent });
+                if (workspace.Layout.Panels[0].Id != gpu.Id) throw new InvalidOperationException("Native title-handle drop did not reorder the panel.");
+                var grip = workspace.FindCard("cpu-panel").ResizeGrip;
+                grip.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent }); pointer += new Vector(0, 100); grip.RaiseEvent(new DragDeltaEventArgs(0, 100) { RoutedEvent = Thumb.DragDeltaEvent });
+                if (workspace.Layout.Panels.Single(p => p.Id == "cpu-panel").HeightRows != 2) throw new InvalidOperationException("Resize preview committed before completion.");
+                grip.RaiseEvent(new DragCompletedEventArgs(0, 100, true) { RoutedEvent = Thumb.DragCompletedEvent });
+                if (workspace.Layout.Panels.Single(p => p.Id == "cpu-panel").HeightRows != 2) throw new InvalidOperationException("Cancelled resize changed saved dimensions.");
+                if (workspace.FindCard("cpu-panel").Plot!.Height != 200) throw new InvalidOperationException("Cancelled resize left its chart preview active.");
+                grip.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent }); pointer += new Vector(0, 100); grip.RaiseEvent(new DragDeltaEventArgs(0, 100) { RoutedEvent = Thumb.DragDeltaEvent }); grip.RaiseEvent(new DragCompletedEventArgs(0, 100, false) { RoutedEvent = Thumb.DragCompletedEvent });
+                if (workspace.Layout.Panels.Single(p => p.Id == "cpu-panel").HeightRows != 3) throw new InvalidOperationException("Native resize grip did not commit snapped dimensions.");
+                workspace.Undo();
+                if (workspace.Layout.Panels.Single(p => p.Id == "cpu-panel").HeightRows != 2) throw new InvalidOperationException("Resize was not one undoable change.");
+                workspace.PointerPosition = originalPointer;
+                await workspace.SavePresetAsync("gesture-layout");
+                var panelMenu = workspace.FindCard(gpu.Id).ContextMenu!;
+                var mergeMenu = panelMenu.Items.OfType<MenuItem>().Single(item => (string)item.Header == "Merge into…");
+                mergeMenu.RaiseEvent(new RoutedEventArgs(MenuItem.SubmenuOpenedEvent));
+                mergeMenu.Items.OfType<MenuItem>().Single().RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                if (workspace.PanelCount != 1 || workspace.Layout.Panels.Single().Series.Count != 2) throw new InvalidOperationException("Native merge command lost sensor bindings.");
+                workspace.FindCard("cpu-panel").ContextMenu!.Items.OfType<MenuItem>().Single(item => (string)item.Header == "Split into one panel per sensor")
+                    .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                if (workspace.PanelCount != 2 || workspace.Layout.Panels.Any(p => p.Series.Count != 1)) throw new InvalidOperationException("Native split command did not preserve each sensor.");
+                workspace.FindCard("cpu-panel").ContextMenu!.Items.OfType<MenuItem>().Single(item => (string)item.Header == "Duplicate panel")
+                    .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                if (workspace.PanelCount != 3 || workspace.Layout.Panels.Select(p => p.Id).Distinct().Count() != 3) throw new InvalidOperationException("Native duplicate command reused a panel identity.");
+                workspace.Undo(); await workspace.LoadPresetAsync("gesture-layout");
                 await File.WriteAllTextAsync(Path.Combine(directory, "bad.json"), "{bad");
                 try { await workspace.LoadPresetAsync("bad"); throw new InvalidOperationException("Malformed preset was accepted."); }
                 catch (System.Text.Json.JsonException) { }
