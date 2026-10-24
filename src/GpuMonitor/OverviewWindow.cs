@@ -26,7 +26,10 @@ public sealed class OverviewWindow : Window
     private readonly TextBlock summary = OverviewTheme.Text("", 12, OverviewTheme.Muted);
     private readonly TextBlock empty = OverviewTheme.Text("Discovering NVIDIA GPUs…", 16, OverviewTheme.Muted);
     private readonly WrapPanel legend = new() { HorizontalAlignment = HorizontalAlignment.Center };
-    private readonly TelemetryPlot comparison = new("%", 100) { Height = 220 };
+    private readonly TelemetryPlot comparison = new("%", 100) { Height = 148 };
+    private readonly HardwareOverviewCard cpuCard = new(true), diskCard = new(false);
+    private readonly WrapPanel hardwareRow = new();
+    private readonly ScrollViewer scroll;
     private readonly DispatcherTimer timer = new();
     private readonly Settings settings;
     private readonly System.Windows.Forms.NotifyIcon? tray;
@@ -47,28 +50,30 @@ public sealed class OverviewWindow : Window
         root = new Grid { Background = OverviewTheme.Canvas }; root.RowDefinitions.Add(new() { Height = new(72) }); root.RowDefinitions.Add(new()); Content = root;
         root.Children.Add(CreateHeader());
         var workspace = new Grid(); workspace.ColumnDefinitions.Add(rail); workspace.ColumnDefinitions.Add(new()); Grid.SetRow(workspace, 1); root.Children.Add(workspace);
-        var sidebar = new DockPanel { Background = OverviewTheme.Brush("#171D25"), Margin = new(0, 1, 0, 0) };
+        var sidebar = new DockPanel { Background = OverviewTheme.Gradient("#15232E", "#101E29"), Margin = new(0, 1, 0, 0) };
         var quick = OverviewTheme.Card(summary, new(12)); quick.Margin = new(8); DockPanel.SetDock(quick, Dock.Bottom); sidebar.Children.Add(quick);
         sidebar.Children.Add(navigation); workspace.Children.Add(sidebar); BuildNavigation();
-        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = body, Padding = new(17, 16, 2, 16) };
+        scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = body, Padding = new(17, 16, 2, 16) };
         Grid.SetColumn(scroll, 1); workspace.Children.Add(scroll);
-        var controls = new DockPanel { Margin = new(0, 0, 14, 12) };
-        var ranges = new StackPanel { Orientation = Orientation.Horizontal }; DockPanel.SetDock(ranges, Dock.Right); controls.Children.Add(ranges);
+        empty.Margin = new(0, 30, 0, 30); body.Children.Add(empty); body.Children.Add(gpuGrid);
+        hardwareRow.Children.Add(cpuCard); hardwareRow.Children.Add(diskCard); body.Children.Add(hardwareRow);
+        cpuCard.Plot.CursorMoved += SetCursor; diskCard.Plot.CursorMoved += SetCursor;
+        customWorkspace = new(WorkspaceSources, workspaceDirectory); customWorkspace.CursorMoved += SetCursor; body.Children.Add(customWorkspace);
+        var comparisonContent = new StackPanel();
+        var comparisonHeading = new DockPanel { Margin = new(0, 0, 0, 8) };
+        var ranges = new StackPanel { Orientation = Orientation.Horizontal }; DockPanel.SetDock(ranges, Dock.Right); comparisonHeading.Children.Add(ranges);
         foreach (int minutes in new[] { 1, 5, 15, 30 })
         {
             var button = OverviewTheme.Command($"{minutes}m", () => { settings.WindowMinutes = minutes; Save(); Render(viewTime); });
-            button.Tag = minutes; rangeButtons.Add(button); ranges.Children.Add(button);
+            button.Padding = new(8, 3, 8, 3); button.FontSize = 11; button.Tag = minutes; rangeButtons.Add(button); ranges.Children.Add(button);
         }
-        controls.Children.Add(OverviewTheme.Text("GPU Overview", 21)); body.Children.Add(controls);
-        empty.Margin = new(0, 30, 0, 30); body.Children.Add(empty); body.Children.Add(gpuGrid);
-        customWorkspace = new(WorkspaceSources, workspaceDirectory); customWorkspace.CursorMoved += SetCursor; body.Children.Add(customWorkspace);
-        var comparisonContent = new StackPanel(); comparisonContent.Children.Add(OverviewTheme.Text("GPU utilization comparison", 16));
+        comparisonHeading.Children.Add(OverviewTheme.Text("GPU Utilization (Selected GPUs)", 15)); comparisonContent.Children.Add(comparisonHeading);
         comparisonContent.Children.Add(comparison); comparisonContent.Children.Add(legend);
         var compareCard = OverviewTheme.Card(comparisonContent); compareCard.Margin = new(0, 0, 14, 14); body.Children.Add(compareCard);
         OverviewTheme.PlotMenu(comparison, "%", "gpu-comparison"); comparison.CursorMoved += SetCursor;
-        var footer = OverviewTheme.Text("Read-only monitoring  ·  Right-click a graph to export its measured data", 12, OverviewTheme.Muted);
+        var footer = OverviewTheme.Text(savePreferences ? "Read-only monitoring · Right-click any graph to inspect or export its source data" : "Synthetic fixture data · actual Windows app render · not live hardware readings", 11, OverviewTheme.Muted);
         footer.TextWrapping = TextWrapping.Wrap; body.Children.Add(footer);
-        gpuGrid.SizeChanged += (_, _) => Reflow();
+        gpuGrid.SizeChanged += (_, _) => Reflow(); hardwareRow.SizeChanged += (_, _) => Reflow();
         timer.Interval = TimeSpan.FromSeconds(settings.RefreshSeconds); timer.Tick += (_, _) => Render(DateTimeOffset.UtcNow);
         if (startMonitoring)
         {
@@ -96,15 +101,26 @@ public sealed class OverviewWindow : Window
 
     private UIElement CreateHeader()
     {
-        var bar = new DockPanel { Background = OverviewTheme.Brush("#11181F"), LastChildFill = true, Margin = new(0, 0, 0, 1) };
+        var bar = new DockPanel { Background = OverviewTheme.Gradient("#14212B", "#0B1923"), LastChildFill = true, Margin = new(0, 0, 0, 1) };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new(8) };
-        health.Margin = new(10, 0, 16, 0); actions.Children.Add(health);
-        var settingsButton = OverviewTheme.Command("⚙", () => OpenSettings(), "Monitoring settings"); settingsButton.ToolTip = "Monitoring settings"; actions.Children.Add(settingsButton);
-        actions.Children.Add(OverviewTheme.Command("—", () => WindowState = WindowState.Minimized, "Minimize"));
-        actions.Children.Add(OverviewTheme.Command("□", () => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized, "Maximize or restore"));
-        actions.Children.Add(OverviewTheme.Command("×", Close, "Close")); DockPanel.SetDock(actions, Dock.Right); bar.Children.Add(actions);
-        var title = new StackPanel { Margin = new(22, 12, 0, 8) }; title.Children.Add(OverviewTheme.Text("GPU Monitor", 20));
-        title.Children.Add(OverviewTheme.Text(savePreferences ? "Real-time GPU monitoring" : "Fixture preview · synthetic data", 13, OverviewTheme.Muted));
+        health.FontSize = 11; health.Margin = new(10, 0, 12, 0); actions.Children.Add(health);
+        var settingsButton = OverviewTheme.Command("⋮", OpenSettings, "Monitoring settings"); settingsButton.ToolTip = "Monitoring settings"; settingsButton.FontSize = 23;
+        settingsButton.Background = Brushes.Transparent; settingsButton.BorderThickness = new(0); actions.Children.Add(settingsButton);
+        DockPanel.SetDock(actions, Dock.Right); bar.Children.Add(actions);
+        var chrome = new StackPanel { Width = 72, Margin = new(0, 8, 0, 0) };
+        var dots = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+        foreach (var item in new[] { ("#F55050", "Close", (Action)Close), ("#F7BD40", "Minimize", (Action)(() => WindowState = WindowState.Minimized)),
+            ("#26CA54", "Maximize or restore", (Action)(() => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized)) })
+        {
+            var dot = OverviewTheme.Command("", item.Item3, item.Item2); dot.Width = dot.Height = 13; dot.Padding = new(0); dot.Margin = new(3, 4, 3, 3);
+            dot.Background = OverviewTheme.Brush(item.Item1); dot.BorderThickness = new(0); dot.ToolTip = item.Item2; dots.Children.Add(dot);
+        }
+        chrome.Children.Add(dots);
+        var collapse = OverviewTheme.Command("‹", () => { collapsed = !collapsed; rail.Width = new(collapsed ? 72 : 222); BuildNavigation(); }, "Collapse or expand navigation");
+        collapse.Background = Brushes.Transparent; collapse.BorderThickness = new(0); collapse.FontSize = 23; collapse.Padding = new(0); collapse.Height = 26; chrome.Children.Add(collapse);
+        bar.Children.Add(chrome);
+        var title = new StackPanel { Margin = new(8, 8, 0, 8) }; var name = OverviewTheme.Text("GPU Monitor", 21); name.FontWeight = FontWeights.SemiBold; title.Children.Add(name);
+        title.Children.Add(OverviewTheme.Text("Real-time GPU Monitoring", 13, OverviewTheme.Muted));
         title.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2) WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; else DragMove(); };
         bar.Children.Add(title); return bar;
     }
@@ -112,15 +128,16 @@ public sealed class OverviewWindow : Window
     private void BuildNavigation()
     {
         navigation.Children.Clear();
-        var toggle = OverviewTheme.Command(collapsed ? "☰" : "☰   Collapse navigation", () => { collapsed = !collapsed; rail.Width = new(collapsed ? 72 : 222); BuildNavigation(); });
-        navigation.Children.Add(toggle);
+        navigation.Margin = new(0, 14, 0, 0);
         Add("\uE80F", "Overview", () => { details = false; BuildNavigation(); Render(viewTime); }, !details);
         Add("\uE7F4", "GPU Details", () => { details = true; BuildNavigation(); Render(viewTime); }, details);
+        Add("\uE8A5", "Processes", () => customWorkspace.OpenPicker("Process"), false);
+        Add("\uE9D9", "System", () => hardwareRow.BringIntoView(), false);
         Add("\uE713", "Settings", OpenSettings, false);
         void Add(string glyph, string label, Action action, bool selected)
         {
-            var button = OverviewTheme.Command(label, action); button.ToolTip = label; button.Margin = new(8, 4, 8, 4); button.Height = 48;
-            button.Background = selected ? OverviewTheme.Brush("#184880") : Brushes.Transparent; button.BorderThickness = new(0);
+            var button = OverviewTheme.Command(label, action); button.ToolTip = label; button.Margin = new(8, 4, 8, 4); button.Height = 48; button.HorizontalContentAlignment = HorizontalAlignment.Left;
+            button.Background = selected ? OverviewTheme.Gradient("#1E5892", "#134578") : Brushes.Transparent; button.BorderThickness = new(0);
             var row = new StackPanel { Orientation = Orientation.Horizontal };
             var icon = OverviewTheme.Text(glyph, 18, selected ? Brushes.White : OverviewTheme.Muted); icon.FontFamily = new("Segoe MDL2 Assets"); row.Children.Add(icon);
             if (!collapsed) { var text = OverviewTheme.Text(label); text.Margin = new(14, 0, 0, 0); row.Children.Add(text); }
@@ -131,6 +148,8 @@ public sealed class OverviewWindow : Window
     private void OpenSettings()
     {
         var menu = OverviewTheme.Menu();
+        menu.Items.Add(OverviewTheme.MenuCommand("Add monitoring panel…", () => customWorkspace.OpenPicker()));
+        menu.Items.Add(OverviewTheme.MenuCommand("Workspace presets…", () => customWorkspace.PresetsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))));
         menu.Items.Add(OverviewTheme.MenuCommand(paused ? "Resume monitoring" : "Pause monitoring", async () =>
         { paused = !paused; await UpdateMonitoringAsync(); }));
         menu.Items.Add(OverviewTheme.MenuCommand("Rescan now", async () => await RefreshAsync()));
@@ -172,8 +191,8 @@ public sealed class OverviewWindow : Window
     private void Render(DateTimeOffset now)
     {
         if (now == default) now = DateTimeOffset.UtcNow; viewTime = now;
-        var snapshots = customWorkspace.PanelCount > 0 ? WorkspaceSources() : null;
-        var session = snapshots?.Single(s => s.Source == NvidiaTelemetry.SourceId) ?? monitoring?.Snapshot(NvidiaTelemetry.SourceId).Single() ?? FixtureSnapshot();
+        var snapshots = WorkspaceSources();
+        var session = snapshots.Single(s => s.Source == NvidiaTelemetry.SourceId);
         var readings = session.Current == null ? Array.Empty<GpuReading>() : NvidiaSnapshot.Readings(session.Current).ToArray();
         var ids = readings.Select(g => g.Id).ToHashSet();
         foreach (var id in cards.Keys.Where(id => !ids.Contains(id)).ToArray()) { gpuGrid.Children.Remove(cards[id]); cards.Remove(id); deviceColors.Remove(id); }
@@ -212,7 +231,9 @@ public sealed class OverviewWindow : Window
         empty.Text = session.Health == ProviderHealth.Starting ? "Discovering NVIDIA GPUs…" : session.Health == ProviderHealth.Stale ? "NVIDIA telemetry unavailable. Check the driver; retrying automatically." : "No NVIDIA GPUs detected.";
         summary.Text = collapsed ? $"{readings.Length} GPUs" : $"{readings.Length} GPUs detected\nLast update  {session.LastSuccess?.ToLocalTime():HH:mm:ss}\n{(paused ? "Paused" : session.Health.ToString())}";
         foreach (var button in rangeButtons) button.Background = (int)button.Tag == settings.WindowMinutes ? OverviewTheme.Brush("#184880") : OverviewTheme.Surface;
-        customWorkspace.Refresh(snapshots ?? [], now, settings.WindowMinutes);
+        cpuCard.Update(snapshots, now, settings.WindowMinutes); diskCard.Update(snapshots, now, settings.WindowMinutes);
+        customWorkspace.Visibility = customWorkspace.PanelCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+        customWorkspace.Refresh(snapshots, now, settings.WindowMinutes);
         Reflow();
     }
     private void Reflow()
@@ -220,8 +241,10 @@ public sealed class OverviewWindow : Window
         double width = gpuGrid.ActualWidth; if (width <= 0) return;
         int columns = Math.Min(Math.Max(1, cards.Count), Math.Max(1, (int)Math.Floor(width / 500)));
         foreach (var card in cards.Values) card.Width = Math.Max(280, width / columns - 14);
+        int hardwareColumns = width >= 1000 ? 2 : 1;
+        cpuCard.Width = diskCard.Width = Math.Max(280, width / hardwareColumns - 14);
     }
-    private void SetCursor(DateTimeOffset? time) { comparison.SetCursor(time); foreach (var card in cards.Values) foreach (var plot in card.Plots) plot.SetCursor(time); customWorkspace.SetCursor(time); }
+    private void SetCursor(DateTimeOffset? time) { comparison.SetCursor(time); foreach (var card in cards.Values) foreach (var plot in card.Plots) plot.SetCursor(time); customWorkspace.SetCursor(time); cpuCard.Plot.SetCursor(time); diskCard.Plot.SetCursor(time); }
     private ProviderSnapshot FixtureSnapshot() => new(NvidiaTelemetry.SourceId, fixtureSession.Health, fixtureSession.Error,
         fixtureSession.LastSuccess, fixtureSession.Current, fixtureSession.HistorySnapshot(), fixtureSession.Definitions);
     private IReadOnlyList<ProviderSnapshot> WorkspaceSources() => monitoring?.Snapshot() ?? workspaceFixtures ?? [FixtureSnapshot()];
@@ -234,6 +257,10 @@ public sealed class OverviewWindow : Window
     }
     internal IReadOnlyList<TelemetryPlot> VerifyPlots => cards.Values.SelectMany(c => c.Plots).ToArray();
     internal FrameworkElement VerificationRoot => root;
+    internal FrameworkElement VerificationHardwareRow => hardwareRow;
+    internal FrameworkElement VerificationComparison => comparison;
+    internal IReadOnlyList<TelemetryPlot> VerificationHardwarePlots => [cpuCard.Plot, diskCard.Plot];
+    internal ProviderSnapshot VerificationGpuSnapshot => FixtureSnapshot();
     internal int VerificationDeviceCount => cards.Count;
     internal async Task VerifyPauseAsync(bool value) { paused = value; await UpdateMonitoringAsync(); }
     internal Task VerifyRescanAsync() => RefreshAsync();

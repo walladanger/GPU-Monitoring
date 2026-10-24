@@ -35,9 +35,11 @@ internal sealed class MonitoringWorkspace : StackPanel
         panels.SizeChanged += (_, _) => Reflow();
     }
 
-    private void Edit(WorkspacePanel? panel)
+    internal void OpenPicker(string initialQuery = "") => Edit(null, initialQuery);
+
+    private void Edit(WorkspacePanel? panel, string initialQuery = "")
     {
-        var editor = new WorkspacePanelEditor(Window.GetWindow(this), sources(), panel);
+        var editor = new WorkspacePanelEditor(Window.GetWindow(this), sources(), panel, initialQuery);
         if (editor.ShowDialog() == true && editor.Result != null) PutPanel(editor.Result);
     }
 

@@ -35,10 +35,11 @@ internal static class OverviewChecks
             for (int tick = 0; tick <= 30; tick++)
             {
                 string rows = string.Join('\n', Enumerable.Range(0, count).Select(gpu =>
-                    $"{gpu}, NVIDIA GeForce RTX 3090, GPU-fixture-{gpu}, 00000000:{gpu + 1:00}:00.0, 24576, {40 + (tick * 7 + gpu * 13) % 48}, {8192 + tick * 128 + gpu * 1024}, 65, 300, 62, 1500, 9750"));
+                    $"{gpu}, NVIDIA GeForce RTX 3090, GPU-fixture-{gpu}, 00000000:{gpu + 1:00}:00.0, 24576, {62 + gpu * 7 + (int)(5 * Math.Sin(tick * .7 + gpu) + 3 * Math.Sin(tick * 2.3))}, {17408 + gpu * 512 + (int)(512 * Math.Sin(tick * .12 + gpu))}, 65, 300, 62, 1500, 9750"));
                 var time = now.AddSeconds(-300 + tick * 10);
                 window.ApplyFixture(CsvTelemetry.Parse(rows, time), time, render: tick == 30);
             }
+            window.SetWorkspaceFixtures(new[] { window.VerificationGpuSnapshot }.Concat(HardwareFixtures(now)).ToArray(), now);
             window.VerifyInventory(count);
         }
         timer.Tick += (_, _) =>
@@ -54,10 +55,18 @@ internal static class OverviewChecks
                 var (count, width) = cases[index];
                 if (bitmap.PixelWidth != width || bitmap.PixelHeight != 1024)
                     throw new InvalidOperationException("Fixture viewport dimensions do not match the requested reference size.");
-                var marginPixel = new byte[4]; bitmap.CopyPixels(new Int32Rect(225, 250, 1, 1), marginPixel, 4, 0);
-                if (marginPixel[0] != 29 || marginPixel[1] != 23 || marginPixel[2] != 16)
-                    throw new InvalidOperationException("Viewport capture scaled or clipped the 222-DIP navigation boundary.");
                 using (var stream = File.Create(Path.Combine(output, $"fixture-{count}-gpus-{width}.png"))) encoder.Save(stream);
+                if (count == 2 && width == 1536)
+                {
+                    var gpuTop = window.VerifyPlots[0].TranslatePoint(new Point(0, 0), viewport);
+                    var hardwareTop = window.VerificationHardwareRow.TranslatePoint(new Point(0, 0), viewport);
+                    var comparisonTop = window.VerificationComparison.TranslatePoint(new Point(0, 0), viewport);
+                    if (gpuTop.X < 239 || hardwareTop.Y <= gpuTop.Y || comparisonTop.Y <= hardwareTop.Y ||
+                        comparisonTop.Y + window.VerificationComparison.ActualHeight > 1000)
+                        throw new InvalidOperationException("Annotated GPU / CPU-disk / comparison composition does not fit the reference viewport.");
+                    if (window.VerificationHardwarePlots.Any(p => p.VisibleSamples.Count != 31))
+                        throw new InvalidOperationException("Reference hardware row must render its actual fixture samples.");
+                }
                 // Inspect chart interiors, excluding all card headings and numeric labels.
                 if (count > 0)
                 {
@@ -109,6 +118,33 @@ internal static class OverviewChecks
         };
         try { app.Run(window); } catch (Exception error) { Fail(error); }
         finally { host?.Dispose(); }
+    }
+
+    private static IEnumerable<ProviderSnapshot> HardwareFixtures(DateTimeOffset now)
+    {
+        var cpu = new DeviceIdentity("windows-system", "cpu-total", DeviceKind.Cpu, "AMD Ryzen 7 7800X3D", "0");
+        var ram = new DeviceIdentity("windows-system", "physical-memory", DeviceKind.Memory, "Physical RAM", "0");
+        var disk = new DeviceIdentity("windows-disks", "PhysicalDrive0", DeviceKind.Disk, "0 C:", "0");
+        var cpuSamples = new List<TelemetrySample>(); var diskSamples = new List<TelemetrySample>();
+        for (int tick = 0; tick <= 30; tick++)
+        {
+            var time = now.AddSeconds(-300 + tick * 10);
+            cpuSamples.Add(new(cpu, "cpu.usage", time, 28 + 5 * Math.Sin(tick * 1.5) + 3 * Math.Sin(tick * .4)));
+            cpuSamples.Add(new(cpu, "cpu.logical", time, 16));
+            cpuSamples.Add(new(ram, "ram.used", time, 24L * 1073741824));
+            diskSamples.Add(new(disk, "disk.busy", time, 62 + 4 * Math.Sin(tick * 2.1)));
+            diskSamples.Add(new(disk, "disk.read", time, 152 * 1048576));
+            diskSamples.Add(new(disk, "disk.write", time, 298 * 1048576));
+        }
+        ProviderSnapshot Snapshot(string source, DeviceIdentity[] devices, List<TelemetrySample> history, IReadOnlyList<MetricDefinition> definitions)
+        {
+            var current = history.Where(s => s.Time == now).ToArray();
+            return new(source, ProviderHealth.Live, null, now,
+                new(devices, current.Select(s => new MetricCapability(s.Device, s.MetricKey, s.Availability)).ToArray(), current, []), history, definitions);
+        }
+        yield return Snapshot(cpu.Source, [cpu, ram], cpuSamples, new WindowsSystemCollector().Definitions);
+        using var disks = new DiskCollector();
+        yield return Snapshot(disk.Source, [disk], diskSamples, disks.Definitions);
     }
 
     internal static RenderTargetBitmap Capture(FrameworkElement view)

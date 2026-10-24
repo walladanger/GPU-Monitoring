@@ -17,7 +17,7 @@ internal sealed class WorkspacePanelEditor : Window
     internal readonly System.Windows.Controls.Button ApplyButton;
     public WorkspacePanel? Result { get; private set; }
 
-    public WorkspacePanelEditor(Window owner, IReadOnlyList<ProviderSnapshot> snapshots, WorkspacePanel? panel = null)
+    public WorkspacePanelEditor(Window owner, IReadOnlyList<ProviderSnapshot> snapshots, WorkspacePanel? panel = null, string initialQuery = "")
     {
         Owner = owner; Title = panel == null ? "Add monitoring panel" : "Edit monitoring panel";
         Width = 650; Height = 580; MinWidth = 450; MinHeight = 400; WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -42,7 +42,7 @@ internal sealed class WorkspacePanelEditor : Window
         header.Children.Add(OverviewTheme.Text("Panel title", 13, OverviewTheme.Muted));
         title = Input(original.Title, "Panel title"); title.MaxLength = 96; header.Children.Add(title);
         header.Children.Add(OverviewTheme.Text("Search sensors by device, metric, group or source", 13, OverviewTheme.Muted));
-        search = Input("", "Search monitoring sensors"); header.Children.Add(search);
+        search = Input(initialQuery, "Search monitoring sensors"); header.Children.Add(search);
         var mode = new StackPanel { Orientation = Orientation.Horizontal, Margin = new(0, 4, 0, 12) };
         mode.Children.Add(new RadioButton { Content = "Line", IsChecked = original.Chart == "line", Foreground = Brushes.White, GroupName = "ChartType" });
         area.IsChecked = original.Chart == "area"; mode.Children.Add(area); header.Children.Add(mode);
