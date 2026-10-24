@@ -26,6 +26,7 @@ public sealed partial class TelemetryPlot
         Children.Add(viewState);
         ToolTip = "Ctrl+wheel / Ctrl+plus/minus: zoom · Ctrl+Left/Right: pan · Ctrl+Space: pause · Ctrl+Home: live/reset. Right-click for exports and series.";
         PreviewMouseDown += (_, _) => Focus();
+        MouseDown += (_, e) => { if (e.ChangedButton == MouseButton.Left) { Focus(); e.Handled = true; } };
         PreviewMouseWheel += (_, e) =>
         {
             if (Keyboard.Modifiers != ModifierKeys.Control) return;
