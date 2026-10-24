@@ -23,6 +23,8 @@ public static class PlotData
         return samples.Where(s => s.Time >= start && s.Time <= now).ToArray();
     }
 
+    public static bool HasMeasurements(IEnumerable<TelemetrySample> samples) => samples.Any(s => s.Value.HasValue);
+
     public static TelemetrySample? Nearest(IReadOnlyList<TelemetrySample> samples, DateTimeOffset time) =>
         samples.Count == 0 ? null : samples.MinBy(s => Math.Abs((s.Time - time).Ticks));
 

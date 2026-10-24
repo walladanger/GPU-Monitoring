@@ -261,7 +261,7 @@ public sealed class OverviewWindow : Window
     internal FrameworkElement VerificationHardwareRow => hardwareRow;
     internal FrameworkElement VerificationComparison => comparison;
     internal IReadOnlyList<TelemetryPlot> VerificationHardwarePlots => [cpuCard.Plot, diskCard.Plot];
-    internal ProviderSnapshot VerificationGpuSnapshot => FixtureSnapshot();
+    internal ProviderSnapshot VerificationGpuSnapshot => WorkspaceSources().Single(s => s.Source == NvidiaTelemetry.SourceId);
     internal int VerificationDeviceCount => cards.Count;
     internal async Task VerifyPauseAsync(bool value) { paused = value; await UpdateMonitoringAsync(); }
     internal Task VerifyRescanAsync() => RefreshAsync();

@@ -32,6 +32,8 @@ internal static class OverviewMonitoringChecks
             busy = true;
             try
             {
+                if (window.VerificationGpuSnapshot.Health != ProviderHealth.Live || window.VerificationGpuSnapshot.Current?.Devices.Count != 1)
+                    throw new InvalidOperationException("Native verification did not read the active engine's actual snapshot.");
                 window.VerifyInventory(1);
                 if (monitoring.Snapshot().Single(s => s.Source == failed.SourceId).Health != ProviderHealth.Stale)
                     throw new InvalidOperationException("The failed source did not retain independent health.");

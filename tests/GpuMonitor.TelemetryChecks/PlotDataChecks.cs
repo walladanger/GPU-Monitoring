@@ -17,6 +17,10 @@ internal static class PlotDataChecks
         var d = new DeviceIdentity("nvidia-smi", "GPU-A", DeviceKind.Gpu, "NVIDIA, \"Test\"", "0");
         TelemetrySample Sample(int seconds, double? value) => new(d, "utilization.gpu", now.AddSeconds(seconds), value);
         var samples = new[] { Sample(-61, 50), Sample(-60, 30), Sample(-20, null), Sample(0, 20.125), Sample(1, 99) };
+        check(!PlotData.HasMeasurements(new[] { Sample(0, null) }) && !PlotData.HasMeasurements([]),
+            "A native trace with only unavailable samples cannot satisfy measured-data acceptance");
+        check(PlotData.HasMeasurements(new[] { Sample(-1, null), Sample(0, 0) }),
+            "An actual numeric zero is a valid measured trace alongside unavailable gaps");
         var window = PlotData.Window(samples, now, 1);
         check(window.Count == 3 && window[0] == samples[1] && window[^1] == samples[3], "Plot window includes exact boundaries and excludes old/future samples");
         check(PlotData.Nearest(window, now.AddSeconds(-19))?.Value == null, "Inspection selects an unavailable sample rather than interpolating across a gap");

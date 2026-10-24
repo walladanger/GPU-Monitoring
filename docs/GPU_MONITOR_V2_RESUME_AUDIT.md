@@ -76,3 +76,11 @@ Next increments:
 No release milestone is declared complete by this audit. The PRs are stacked and remain unmerged; physical dual-3090 validation and visual signoff remain open.
 
 The panel interaction branch keeps the PR #30 reference-render corrections as its base; it does not return to the earlier Overview composition. Portable checks and native CI evidence are recorded on the interaction PR. No GUI fidelity, hardware or release milestone is marked complete from code/fixture tests alone.
+
+### Chart and acceptance continuation
+
+[PR #32](https://github.com/walladanger/GPU-Monitoring/pull/32) implements independent labeled secondary axes, mixed-unit merge/split, bounded zoom/pan, per-chart snapshot pause/reset, visibility and PNG export. All six default fixture screenshots at the first Windows head are pixel-identical to PR #30. Independent review's focus-route regression and final CI evidence are recorded on the PR.
+
+The next branch packages [target validation](GPU_MONITOR_V2_TARGET_ACCEPTANCE.md), including actual NVIDIA headless checks and a real native Overview capture, plus separate synthetic native gates. Portable checks total 234 after rejecting null-only traces as hardware evidence. It cannot complete physical pointer, DPI/monitor transitions, installation acceptance or human visual signoff while the registered desktop is offline. No master milestone is marked complete.
+
+Remaining separate implementation tracks retain their phase IDs: broader chart families/analytics (13), process/agent/trace views (09/11/12), optional persistence and tray quick view (14), plus target-machine performance and release acceptance.

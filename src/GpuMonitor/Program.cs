@@ -55,6 +55,13 @@ public static class Program
         }
         if (args.Contains("--verify-overview")) { OverviewChecks.Run(); return; }
         if (args.Contains("--verify-monitoring")) { OverviewMonitoringChecks.Run(); return; }
+        if (args.Contains("--verify-live-overview"))
+        {
+            int index = Array.IndexOf(args, "--expected-gpus");
+            if (index < 0 || index + 1 >= args.Length || !int.TryParse(args[index + 1], out int expected) || expected is < 1 or > 64)
+            { Environment.ExitCode = 2; return; }
+            LiveOverviewChecks.Run(expected); return;
+        }
         if (args.Contains("--verify-charts")) { ChartInteractionChecks.Run(); return; }
         if (args.Contains("--verify-workspace")) { WorkspaceChecks.Run(); return; }
         if (args.Contains("--self-test"))
