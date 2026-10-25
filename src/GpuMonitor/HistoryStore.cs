@@ -14,7 +14,7 @@ public sealed record HistoryOptions(string Path, int RetentionDays = 7, int Maxi
 }
 public sealed record HistorySensor(WorkspaceSeries Selection, string Unit, string Name)
 {
-    public override string ToString() => $"{Selection.Source} · {Name} · {Selection.MetricKey} [{Unit}]";
+    public override string ToString() => $"{Selection.Source} · {Selection.DeviceId} · {Name} · {Selection.MetricKey} [{Unit}]";
 }
 
 /// <summary>Single-writer numeric archive. All calls belong on a background worker, never the WPF thread.</summary>
