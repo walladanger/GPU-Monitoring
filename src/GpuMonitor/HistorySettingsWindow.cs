@@ -18,7 +18,7 @@ internal sealed class HistorySettingsWindow : Window
         var root = new StackPanel { Margin = new(20) }; Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }; root.Children.Add(OverviewTheme.DialogHeading(this));
         Enabled.IsChecked = enabled; root.Children.Add(Enabled);
         root.Children.Add(OverviewTheme.Text("Keep measurements for (days)", 13, OverviewTheme.Muted));
-        Days.SelectedItem = days; if (Days.SelectedItem == null) Days.SelectedItem = 7; root.Children.Add(Days);
+        OverviewTheme.Input(Days); Days.SelectedItem = days; if (Days.SelectedItem == null) Days.SelectedItem = 7; root.Children.Add(Days);
         var note = OverviewTheme.Text("Off by default · up to 250,000 samples / 128 MiB database. Numeric values, units, device IDs and timestamps only. Collection continues while minimized; closing stops collection. Disabling keeps existing records.", 12, OverviewTheme.Muted);
         note.TextWrapping = TextWrapping.Wrap; note.Margin = new(0, 14, 0, 12); root.Children.Add(note);
         var location = OverviewTheme.Text(path, 11, OverviewTheme.Muted); location.TextWrapping = TextWrapping.Wrap; root.Children.Add(location);

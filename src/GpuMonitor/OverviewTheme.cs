@@ -45,6 +45,12 @@ internal static class OverviewTheme
         System.Windows.Automation.AutomationProperties.SetName(button, accessibleName ?? label);
         return button;
     }
+    public static void Input(Control input)
+    {
+        input.Background = Surface; input.Foreground = Brushes.White; input.BorderBrush = Border; input.Padding = new(6);
+        input.Resources[SystemColors.WindowBrushKey] = Surface; input.Resources[SystemColors.WindowTextBrushKey] = Brushes.White;
+        input.Resources[SystemColors.ControlBrushKey] = Surface; input.Resources[SystemColors.ControlTextBrushKey] = Brushes.White;
+    }
     public static MenuItem MenuCommand(string title, Action action)
     {
         var item = new MenuItem { Header = title };

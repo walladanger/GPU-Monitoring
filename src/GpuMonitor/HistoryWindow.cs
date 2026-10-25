@@ -25,7 +25,8 @@ internal sealed class HistoryWindow : Window
     public HistoryWindow(Window owner, string path)
     {
         this.path = path; Owner = owner; Title = "Stored history"; Width = 1050; Height = 690; MinWidth = 720; MinHeight = 620;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = OverviewTheme.Canvas; Foreground = Brushes.White; FontFamily = new("Segoe UI"); Content = root;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = OverviewTheme.Canvas; Foreground = Brushes.White; FontFamily = new("Segoe UI"); Content = new Border { Background = OverviewTheme.Canvas, Child = root };
+        foreach (var input in new Control[] { sensors, search, ending, minutes }) OverviewTheme.Input(input);
         root.Children.Add(OverviewTheme.DialogHeading(this));
         root.Children.Add(OverviewTheme.Text("Archived measurements · never live readings. Search shows up to 256 saved sensors; refine the search if needed.", 12, OverviewTheme.Muted));
         var find = new WrapPanel { Margin = new(0, 12, 0, 8) }; find.Children.Add(search);
