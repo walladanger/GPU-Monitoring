@@ -15,7 +15,7 @@ internal static class OverviewMonitoringChecks
         var failed = new FixtureProvider("fixture-unavailable");
         var monitoring = new DashboardTelemetry([gpu, failed]);
         var app = new Application();
-        var window = new OverviewWindow(telemetry: monitoring);
+        var window = new OverviewWindow(telemetry: monitoring, preferences: new Settings(), fixtureData: true);
         bool busy = false, completed = false, failedCheck = false;
         var elapsed = Stopwatch.StartNew();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
@@ -34,6 +34,7 @@ internal static class OverviewMonitoringChecks
             {
                 if (window.VerificationGpuSnapshot.Health != ProviderHealth.Live || window.VerificationGpuSnapshot.Current?.Devices.Count != 1)
                     throw new InvalidOperationException("Native verification did not read the active engine's actual snapshot.");
+                if (monitoring.HistoryStatus.Requested) throw new InvalidOperationException("Synthetic lifecycle verification must never enable the user history archive.");
                 window.VerifyInventory(1);
                 if (monitoring.Snapshot().Single(s => s.Source == failed.SourceId).Health != ProviderHealth.Stale)
                     throw new InvalidOperationException("The failed source did not retain independent health.");

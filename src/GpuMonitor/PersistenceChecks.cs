@@ -14,7 +14,7 @@ internal static class PersistenceChecks
         string output = Path.Combine(AppContext.BaseDirectory, "overview-verification"); Directory.CreateDirectory(output);
         var app = new Application(); var monitor = new DashboardTelemetry([new Provider()]);
         var settings = new Settings { RefreshSeconds = 1 };
-        var window = new OverviewWindow(telemetry: monitor, preferences: settings, historyDirectory: root, workspaceDirectory: Path.Combine(root, "workspace"));
+        var window = new OverviewWindow(telemetry: monitor, preferences: settings, historyDirectory: root, workspaceDirectory: Path.Combine(root, "workspace"), fixtureData: true);
         void Require(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
         void Fail(Exception error)
         {

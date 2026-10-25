@@ -33,16 +33,16 @@ public sealed partial class OverviewWindow : Window
     private readonly DispatcherTimer timer = new();
     private readonly Settings settings;
     private readonly System.Windows.Forms.NotifyIcon? tray;
-    private readonly bool savePreferences;
+    private readonly bool savePreferences, usesFixtureData;
     private bool reading, closed, closing, paused, details, collapsed;
     private string[] comparisonIds = [];
     private DateTimeOffset viewTime;
     private readonly List<Button> rangeButtons = [];
     private static readonly string[] Colors = ["#2B82F8", "#A66CF2", "#33DF32", "#FFBA4D", "#F45A5A", "#39BCD2", "#DBCE32", "#E977BD"];
 
-    public OverviewWindow(bool startMonitoring = true, CollectorConfiguration? configuration = null, DashboardTelemetry? telemetry = null, string? workspaceDirectory = null, string? historyDirectory = null, Settings? preferences = null)
+    public OverviewWindow(bool startMonitoring = true, CollectorConfiguration? configuration = null, DashboardTelemetry? telemetry = null, string? workspaceDirectory = null, string? historyDirectory = null, Settings? preferences = null, bool fixtureData = false)
     {
-        settings = preferences ?? (startMonitoring ? Settings.Load() : new Settings()); settings.Normalize(); savePreferences = startMonitoring && preferences == null;
+        settings = preferences ?? (startMonitoring ? Settings.Load() : new Settings()); settings.Normalize(); savePreferences = startMonitoring && preferences == null; usesFixtureData = !startMonitoring || fixtureData;
         historyPath = historyDirectory == null ? Settings.HistoryPath : Path.Combine(historyDirectory, "telemetry.sqlite");
         Title = "GPU Monitor"; Width = 1536; Height = 1024; MinWidth = 680; MinHeight = 540;
         Background = OverviewTheme.Canvas; Foreground = Brushes.White; FontFamily = new("Segoe UI");
@@ -73,7 +73,7 @@ public sealed partial class OverviewWindow : Window
         comparisonContent.Children.Add(comparison); comparisonContent.Children.Add(legend);
         var compareCard = OverviewTheme.Card(comparisonContent); compareCard.Margin = new(0, 0, 14, 14); body.Children.Add(compareCard);
         OverviewTheme.PlotMenu(comparison, "%", "gpu-comparison"); comparison.CursorMoved += SetCursor;
-        var footer = OverviewTheme.Text(savePreferences ? "Read-only monitoring · Right-click any graph to inspect or export its source data" : "Synthetic fixture data · actual Windows app render · not live hardware readings", 11, OverviewTheme.Muted);
+        var footer = OverviewTheme.Text(!usesFixtureData ? "Read-only monitoring · Right-click any graph to inspect or export its source data" : "Synthetic fixture data · actual Windows app render · not live hardware readings", 11, OverviewTheme.Muted);
         footer.TextWrapping = TextWrapping.Wrap; body.Children.Add(footer);
         gpuGrid.SizeChanged += (_, _) => Reflow(); hardwareRow.SizeChanged += (_, _) => Reflow();
         timer.Interval = TimeSpan.FromSeconds(settings.RefreshSeconds); timer.Tick += (_, _) => Render(DateTimeOffset.UtcNow);
@@ -236,7 +236,7 @@ public sealed partial class OverviewWindow : Window
         health.Text = paused ? "● Paused" : session.Health switch { ProviderHealth.Live => "● Connected", ProviderHealth.Stale => "● Telemetry unavailable", _ => "● Discovering…" };
         health.Foreground = paused || session.Health == ProviderHealth.Stale ? OverviewTheme.Brush("#F9B84D") : OverviewTheme.Green;
         health.ToolTip = session.Error ?? $"Last update: {session.LastSuccess?.ToLocalTime():HH:mm:ss}";
-        if (!savePreferences) { health.Text = "● Test fixture"; health.ToolTip = "Synthetic verification data; no hardware is polled."; }
+        if (usesFixtureData) { health.Text = "● Test fixture"; health.ToolTip = "Synthetic verification data; no hardware is polled."; }
         empty.Visibility = readings.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         empty.Text = session.Health == ProviderHealth.Starting ? "Discovering NVIDIA GPUs…" : session.Health == ProviderHealth.Stale ? "NVIDIA telemetry unavailable. Check the driver; retrying automatically." : "No NVIDIA GPUs detected.";
         summary.Text = collapsed ? $"{readings.Length} GPUs" : $"{readings.Length} GPUs detected\nLast update  {session.LastSuccess?.ToLocalTime():HH:mm:ss}\n{(paused ? "Paused" : session.Health.ToString())}";
@@ -277,7 +277,7 @@ public sealed partial class OverviewWindow : Window
     internal MonitoringWorkspace VerifyWorkspace => customWorkspace;
     internal void SetWorkspaceFixtures(IReadOnlyList<ProviderSnapshot> snapshots, DateTimeOffset now)
     {
-        if (savePreferences) throw new InvalidOperationException("Workspace fixtures require a non-collecting verification window.");
+        if (monitoring != null) throw new InvalidOperationException("Workspace fixtures require a non-collecting verification window.");
         workspaceFixtures = snapshots; Render(now);
     }
 }
