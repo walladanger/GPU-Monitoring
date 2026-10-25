@@ -17,6 +17,9 @@ internal static class DashboardTelemetryChecks
         check(monitor.Snapshot("dashboard-test").Single().Series("cpu", "usage").Count == history.Count &&
             monitor.Snapshot("dashboard-test").Single().Series("missing", "usage").Count == 0,
             "Dashboard chart projection retains only the selected measured device series");
+        var currentOnly = monitor.Snapshot(includeHistory: false).Single();
+        check(currentOnly.History.Count == 0 && currentOnly.EventHistory.Count == 0 && currentOnly.Current!.Samples.Count > 0 && currentOnly.Health == ProviderHealth.Live,
+            "Tray current-only snapshots retain real source data without copying historical arrays");
         await Task.Delay(150, deadline.Token);
         check(provider.Reads == paused && history.Count > 0 && monitor.Snapshot().Single().History.Count == history.Count,
             "Dashboard pause drains collection while retaining exact session history");

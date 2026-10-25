@@ -135,6 +135,15 @@ jobs:
           $result = Join-Path (Split-Path $exe) 'overview-verification/persistence-result.txt'
           if (Test-Path $result) { Get-Content $result }
           if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Persistence verification failed' }
+      - name: Verify native tray quick-view settings, bindings and placement
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $process = Start-Process $exe -ArgumentList '--verify-tray' -PassThru
+          if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Tray verification timed out' }
+          $result = Join-Path (Split-Path $exe) 'overview-verification/tray-result.txt'
+          if (Test-Path $result) { Get-Content $result }
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Tray verification failed' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -57,6 +57,7 @@ TelemetryContractChecks.Run(Check);
 PlotDataChecks.Run(Check);
 HistoryStoreChecks.Run(Check);
 PersistenceSettingsChecks.Run(Check);
+TrayReadingsChecks.Run(Check);
 PlotRangeChecks.Run(Check);
 await TelemetrySessionChecks.Run(Check);
 await TelemetryEngineChecks.Run(Check);

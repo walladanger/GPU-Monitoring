@@ -174,6 +174,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         catch (Exception error) { if (IsLoaded) MessageBox.Show(Window.GetWindow(this), error.Message, "Workspace preset could not be saved or loaded"); }
         finally { IsEnabled = true; }
     }
+    internal IReadOnlyList<string> PresetNames() => store.ListPresets();
     internal Task SavePresetAsync(string id) => store.SaveAsync(id, Layout);
     internal async Task LoadPresetAsync(string id) => ApplyLayout(await store.LoadAsync(id));
 }

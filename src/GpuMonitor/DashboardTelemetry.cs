@@ -25,7 +25,7 @@ public sealed class DashboardTelemetry : IAsyncDisposable
         catch { set.Dispose(); throw; }
     }
 
-    public IReadOnlyList<ProviderSnapshot> Snapshot(string? sourceId = null) => engine.Snapshot(sourceId);
+    public IReadOnlyList<ProviderSnapshot> Snapshot(string? sourceId = null, bool includeHistory = true) => engine.Snapshot(sourceId, includeHistory);
 
     public async Task ConfigureHistoryAsync(HistoryOptions? options)
     {

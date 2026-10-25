@@ -48,6 +48,7 @@ public static class Program
             { Environment.ExitCode = 2; return; }
             LiveOverviewChecks.Run(expected); return;
         }
+        if (args.Contains("--verify-tray")) { TrayChecks.Run(); return; }
         if (args.Contains("--verify-persistence")) { PersistenceChecks.Run(); return; }
         if (args.Contains("--verify-charts")) { ChartInteractionChecks.Run(); return; }
         if (args.Contains("--verify-workspace")) { WorkspaceChecks.Run(); return; }

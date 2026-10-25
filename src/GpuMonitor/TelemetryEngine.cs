@@ -93,7 +93,7 @@ public sealed class TelemetryEngine
         catch (Exception error) { System.Diagnostics.Trace.TraceError("Telemetry observer: " + error.Message); }
     }
 
-    public IReadOnlyList<ProviderSnapshot> Snapshot(string? sourceId = null)
+    public IReadOnlyList<ProviderSnapshot> Snapshot(string? sourceId = null, bool includeHistory = true)
     {
         var result = new List<ProviderSnapshot>();
         foreach (var pair in sources)
@@ -105,7 +105,7 @@ public sealed class TelemetryEngine
                 session.Prune(DateTimeOffset.UtcNow);
                 var current = session.Current;
                 result.Add(new(pair.Key, session.Health, session.Error, session.LastSuccess, current,
-                    session.HistorySnapshot(), Array.AsReadOnly(session.Definitions.ToArray())) { EventHistory = session.EventSnapshot() });
+                    includeHistory ? session.HistorySnapshot() : Array.Empty<TelemetrySample>(), Array.AsReadOnly(session.Definitions.ToArray())) { EventHistory = includeHistory ? session.EventSnapshot() : Array.Empty<TelemetryEvent>() });
             }
         }
         return new ReadOnlyCollection<ProviderSnapshot>(result);

@@ -82,8 +82,7 @@ public sealed partial class OverviewWindow : Window
             // Preserve NVIDIA-only normal launch. Extra hardware/runtime sources require --sources.
             monitoring = telemetry ?? (configuration == null ? new DashboardTelemetry([new NvidiaCollector()]) : DashboardTelemetry.Create(configuration));
             tray = new System.Windows.Forms.NotifyIcon { Text = "GPU Monitor", Icon = System.Drawing.SystemIcons.Application, Visible = true };
-            var menu = new System.Windows.Forms.ContextMenuStrip(); menu.Items.Add("Open GPU Monitor", null, (_, _) => Dispatcher.Invoke(Restore));
-            menu.Items.Add("Exit", null, (_, _) => Dispatcher.Invoke(Close)); tray.ContextMenuStrip = menu;
+            InitializeTray();
             tray.DoubleClick += (_, _) => Dispatcher.Invoke(Restore);
             Loaded += async (_, _) =>
             {
@@ -97,12 +96,12 @@ public sealed partial class OverviewWindow : Window
             if (closing || monitoring == null) return;
             e.Cancel = true;
             if (closed) return;
-            closed = true; timer.Stop();
+            closed = true; timer.Stop(); quickView?.Hide();
             try { await monitoring.DisposeAsync(); }
             catch (Exception error) { System.Diagnostics.Trace.TraceError(error.ToString()); }
             finally { closing = true; _ = Dispatcher.BeginInvoke(new Action(Close)); }
         };
-        Closed += (_, _) => { closed = true; timer.Stop(); tray?.Dispose(); };
+        Closed += (_, _) => { closed = true; timer.Stop(); quickView?.Dispose(); tray?.Dispose(); };
     }
 
     private UIElement CreateHeader()
@@ -156,6 +155,7 @@ public sealed partial class OverviewWindow : Window
         var menu = OverviewTheme.Menu();
         menu.Items.Add(OverviewTheme.MenuCommand("Add monitoring panel…", () => customWorkspace.OpenPicker()));
         menu.Items.Add(OverviewTheme.MenuCommand("Workspace presets…", () => customWorkspace.PresetsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))));
+        menu.Items.Add(OverviewTheme.MenuCommand("Tray quick-view settings…", OpenTraySettings));
         menu.Items.Add(OverviewTheme.MenuCommand("Persistent history…", OpenHistorySettings));
         menu.Items.Add(OverviewTheme.MenuCommand("Browse saved history…", OpenStoredHistory));
         if (monitoring?.HistoryStatus is { Requested: true } archive && (archive.Error != null || archive.DroppedBatches > 0))
@@ -175,7 +175,7 @@ public sealed partial class OverviewWindow : Window
         menu.PlacementTarget = this; menu.IsOpen = true;
     }
     private void Save() { if (!savePreferences) return; try { settings.Save(); } catch (Exception error) { MessageBox.Show(this, error.Message, "Settings could not be saved"); } }
-    private void Restore() { Show(); WindowState = WindowState.Normal; Activate(); }
+    private void Restore() { quickView?.Hide(); Show(); WindowState = WindowState.Normal; Activate(); }
 
     private async Task UpdateMonitoringAsync()
     {
