@@ -10,10 +10,13 @@ public sealed class DashboardTelemetry : IAsyncDisposable
     private Task? polling;
     private TimeSpan interval = TimeSpan.FromSeconds(2);
     private bool disposed;
+    private HistoryRecorder? history;
+    private HistoryRecordingStatus historyStatus = new(false, false, null, 0, 0);
+    public HistoryRecordingStatus HistoryStatus => Volatile.Read(ref history)?.Status ?? Volatile.Read(ref historyStatus);
 
     /// <summary>Transfers provider ownership on successful construction.</summary>
     public DashboardTelemetry(ITelemetryProvider[] providers)
-    { this.providers = providers.ToArray(); engine = new(this.providers); }
+    { this.providers = providers.ToArray(); engine = new(this.providers, (batch, definitions) => Volatile.Read(ref history)?.Record(batch, definitions)); }
 
     public static DashboardTelemetry Create(CollectorConfiguration? configuration = null)
     {
@@ -23,6 +26,23 @@ public sealed class DashboardTelemetry : IAsyncDisposable
     }
 
     public IReadOnlyList<ProviderSnapshot> Snapshot(string? sourceId = null) => engine.Snapshot(sourceId);
+
+    public async Task ConfigureHistoryAsync(HistoryOptions? options)
+    {
+        await transitions.WaitAsync();
+        try
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            var prior = Interlocked.Exchange(ref history, null);
+            if (prior != null) await prior.DisposeAsync();
+            historyStatus = new(options != null, false, null, 0, 0);
+            if (options == null) return;
+            var recorder = new HistoryRecorder(options);
+            try { await recorder.Ready; Volatile.Write(ref history, recorder); }
+            catch (Exception error) { await recorder.DisposeAsync(); historyStatus = new(true, false, error.Message, 0, 0); }
+        }
+        finally { transitions.Release(); }
+    }
 
     public async Task SetMonitoringAsync(bool enabled, TimeSpan refreshInterval)
     {
@@ -74,7 +94,11 @@ public sealed class DashboardTelemetry : IAsyncDisposable
             if (disposed) return;
             disposed = true;
             try { await StopCoreAsync(); }
-            finally { foreach (var provider in providers.OfType<IDisposable>()) provider.Dispose(); }
+            finally
+            {
+                try { var recorder = Interlocked.Exchange(ref history, null); if (recorder != null) await recorder.DisposeAsync(); }
+                finally { foreach (var provider in providers.OfType<IDisposable>()) provider.Dispose(); }
+            }
         }
         finally { transitions.Release(); }
     }

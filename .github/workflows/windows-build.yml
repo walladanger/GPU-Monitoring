@@ -133,6 +133,15 @@ jobs:
           $result = Join-Path (Split-Path $exe) 'overview-verification/charts-result.txt'
           if (Test-Path $result) { Get-Content $result }
           if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Chart interaction verification failed' }
+      - name: Verify persistent SQLite history and native saved-history browser
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $process = Start-Process $exe -ArgumentList '--verify-persistence' -PassThru
+          if (-not $process.WaitForExit(45000)) { $process.Kill(); throw 'Persistence verification timed out' }
+          $result = Join-Path (Split-Path $exe) 'overview-verification/persistence-result.txt'
+          if (Test-Path $result) { Get-Content $result }
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Persistence verification failed' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

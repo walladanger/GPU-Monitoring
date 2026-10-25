@@ -11,20 +11,6 @@ using ComboBox = System.Windows.Controls.ComboBox;
 
 namespace GpuMonitor;
 
-public sealed class Settings
-{
-    public int RefreshSeconds { get; set; } = 2;
-    public int WindowMinutes { get; set; } = 5;
-    public bool MinimizeToTray { get; set; } = true;
-    public static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GpuMonitor", "settings.json");
-    public static Settings Load()
-    {
-        try { var s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new(); s.RefreshSeconds = new[] { 1, 2, 5, 10 }.Contains(s.RefreshSeconds) ? s.RefreshSeconds : 2; s.WindowMinutes = new[] { 1, 5, 15, 30 }.Contains(s.WindowMinutes) ? s.WindowMinutes : 5; return s; }
-        catch { return new(); }
-    }
-    public void Save() { Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!); File.WriteAllText(FilePath, JsonSerializer.Serialize(this)); }
-}
-
 public static class Program
 {
     [STAThread] public static void Main(string[] args)
@@ -62,6 +48,7 @@ public static class Program
             { Environment.ExitCode = 2; return; }
             LiveOverviewChecks.Run(expected); return;
         }
+        if (args.Contains("--verify-persistence")) { PersistenceChecks.Run(); return; }
         if (args.Contains("--verify-charts")) { ChartInteractionChecks.Run(); return; }
         if (args.Contains("--verify-workspace")) { WorkspaceChecks.Run(); return; }
         if (args.Contains("--self-test"))

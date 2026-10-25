@@ -2,6 +2,8 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Media;
 using Microsoft.Win32;
 using Button = System.Windows.Controls.Button;
@@ -44,6 +46,40 @@ internal static class OverviewTheme
         button.Click += (_, _) => action();
         System.Windows.Automation.AutomationProperties.SetName(button, accessibleName ?? label);
         return button;
+    }
+    public static void Input(Control input)
+    {
+        input.Background = Surface; input.Foreground = Brushes.White; input.BorderBrush = Border; input.Padding = new(6);
+        input.Resources[SystemColors.WindowBrushKey] = Surface; input.Resources[SystemColors.WindowTextBrushKey] = Brushes.White;
+        input.Resources[SystemColors.ControlBrushKey] = Surface; input.Resources[SystemColors.ControlTextBrushKey] = Brushes.White;
+        if (input is ComboBox combo) FlatCombo(combo);
+    }
+    private static void FlatCombo(ComboBox combo)
+    {
+        var grid = new FrameworkElementFactory(typeof(Grid));
+        var toggle = new FrameworkElementFactory(typeof(ToggleButton));
+        toggle.SetValue(Control.BackgroundProperty, Surface); toggle.SetValue(Control.BorderBrushProperty, Border);
+        toggle.SetValue(UIElement.FocusableProperty, false);
+        toggle.SetBinding(ToggleButton.IsCheckedProperty, new Binding("IsDropDownOpen") { RelativeSource = new(RelativeSourceMode.TemplatedParent), Mode = BindingMode.TwoWay });
+        var chrome = new FrameworkElementFactory(typeof(Border)); chrome.SetValue(System.Windows.Controls.Border.BackgroundProperty, Surface);
+        chrome.SetValue(System.Windows.Controls.Border.BorderBrushProperty, Border); chrome.SetValue(System.Windows.Controls.Border.BorderThicknessProperty, new Thickness(1)); chrome.SetValue(FrameworkElement.MinHeightProperty, 32d);
+        toggle.SetValue(Control.TemplateProperty, new ControlTemplate(typeof(ToggleButton)) { VisualTree = chrome }); grid.AppendChild(toggle);
+        var content = new FrameworkElementFactory(typeof(DockPanel)); content.SetValue(UIElement.IsHitTestVisibleProperty, false); content.SetValue(FrameworkElement.MarginProperty, new Thickness(8, 5, 8, 5));
+        var arrow = new FrameworkElementFactory(typeof(TextBlock)); arrow.SetValue(TextBlock.TextProperty, "▾"); arrow.SetValue(TextBlock.ForegroundProperty, Brushes.White);
+        arrow.SetValue(DockPanel.DockProperty, Dock.Right); arrow.SetValue(FrameworkElement.MarginProperty, new Thickness(10, 0, 0, 0)); content.AppendChild(arrow);
+        var selected = new FrameworkElementFactory(typeof(ContentPresenter)); selected.SetValue(System.Windows.Documents.TextElement.ForegroundProperty, Brushes.White);
+        selected.SetValue(ContentPresenter.ContentProperty, new TemplateBindingExtension(ComboBox.SelectionBoxItemProperty));
+        selected.SetValue(ContentPresenter.ContentTemplateProperty, new TemplateBindingExtension(ComboBox.SelectionBoxItemTemplateProperty)); content.AppendChild(selected); grid.AppendChild(content);
+        var popup = new FrameworkElementFactory(typeof(Popup), "PART_Popup"); popup.SetValue(Popup.PlacementProperty, PlacementMode.Bottom); popup.SetValue(Popup.AllowsTransparencyProperty, true);
+        popup.SetBinding(Popup.IsOpenProperty, new Binding("IsDropDownOpen") { RelativeSource = new(RelativeSourceMode.TemplatedParent), Mode = BindingMode.TwoWay });
+        var border = new FrameworkElementFactory(typeof(Border)); border.SetValue(System.Windows.Controls.Border.BackgroundProperty, Surface);
+        border.SetValue(System.Windows.Controls.Border.BorderBrushProperty, Border); border.SetValue(System.Windows.Controls.Border.BorderThicknessProperty, new Thickness(1));
+        border.SetValue(System.Windows.Documents.TextElement.ForegroundProperty, Brushes.White);
+        border.SetBinding(FrameworkElement.MinWidthProperty, new Binding("ActualWidth") { RelativeSource = new(RelativeSourceMode.TemplatedParent) });
+        var scroll = new FrameworkElementFactory(typeof(ScrollViewer)); scroll.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+        scroll.SetBinding(FrameworkElement.MaxHeightProperty, new Binding("MaxDropDownHeight") { RelativeSource = new(RelativeSourceMode.TemplatedParent) });
+        scroll.AppendChild(new FrameworkElementFactory(typeof(ItemsPresenter))); border.AppendChild(scroll); popup.AppendChild(border); grid.AppendChild(popup);
+        combo.Template = new ControlTemplate(typeof(ComboBox)) { VisualTree = grid };
     }
     public static MenuItem MenuCommand(string title, Action action)
     {
