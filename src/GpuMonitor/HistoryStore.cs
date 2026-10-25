@@ -33,7 +33,7 @@ public sealed class HistoryStore : IDisposable
         try
         {
             long version = Scalar("PRAGMA user_version"), app = Scalar("PRAGMA application_id");
-            if (version > 1 || (app != 0 && app != ApplicationId) || (version == 1 && app != ApplicationId))
+            if (version is not (0 or 1) || (app != 0 && app != ApplicationId) || (version == 1 && app != ApplicationId))
                 throw new FormatException("Unsupported history database schema or application identity; file left unchanged.");
             if (version == 0)
             {

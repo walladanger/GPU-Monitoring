@@ -32,6 +32,18 @@ internal static class HistoryRecorderChecks
             var observed = new TelemetryEngine([new Provider()], (_, _) => throw new IOException("observer failed"));
             await observed.SampleOnceAsync(CancellationToken.None);
             check(observed.Snapshot().Single().Health == ProviderHealth.Live, "A failing optional observer cannot mark a successfully sampled provider stale");
+            await using (var full = new DashboardTelemetry([new LargeProvider()]))
+            {
+                await full.ConfigureHistoryAsync(new(Path.Combine(root, "full.sqlite"), MaximumBytes: 65536));
+                check(full.HistoryStatus.Ready, "Small-capacity archive initializes before the induced write failure");
+                await full.RefreshAsync();
+                while (full.HistoryStatus.Error == null) await Task.Delay(10, timeout.Token);
+                check(!full.HistoryStatus.Ready && full.Snapshot().Single().Health == ProviderHealth.Live && full.HistoryStatus.DroppedBatches > 0,
+                    "A database-full write failure publishes archive error while live collection stays healthy");
+                await full.ConfigureHistoryAsync(null); await full.RefreshAsync();
+                check(full.Snapshot().Single().Current!.Samples.Count == 512,
+                    "Disabling a failed archive drains/disposes safely and leaves later measured collection working");
+            }
             await using var bounded = new HistoryRecorder(new(Path.Combine(root, "bounded.sqlite")));
             await bounded.Ready;
             var batch = await provider.ReadAsync(CancellationToken.None);
@@ -41,6 +53,17 @@ internal static class HistoryRecorderChecks
                 "A saturated bounded archive reports dropped batches and flushes accepted measurements without duplicating them");
         }
         finally { await monitor.DisposeAsync(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+    private sealed class LargeProvider : ITelemetryProvider
+    {
+        public string SourceId => "full-disk-fixture";
+        public IReadOnlyList<MetricDefinition> Definitions => [new(SourceId, "usage", "Usage", "%", 100)];
+        public Task<TelemetryBatch> ReadAsync(CancellationToken cancellation)
+        {
+            var devices = Enumerable.Range(0, 512).Select(i => new DeviceIdentity(SourceId, "device-" + i, DeviceKind.Cpu, new string('x', 480), i.ToString())).ToArray();
+            var now = DateTimeOffset.UtcNow;
+            return Task.FromResult(WindowsSystemCollector.Batch(devices, devices.Select(d => new TelemetrySample(d, "usage", now, 1)).ToList()));
+        }
     }
     private sealed class Provider : ITelemetryProvider
     {

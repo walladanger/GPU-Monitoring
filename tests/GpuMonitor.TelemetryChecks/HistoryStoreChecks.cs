@@ -47,6 +47,12 @@ internal static class HistoryStoreChecks
             var before = File.ReadAllBytes(future); bool rejected = false;
             try { using var unsupported = new HistoryStore(new(future)); } catch (FormatException) { rejected = true; }
             check(rejected && before.SequenceEqual(File.ReadAllBytes(future)), "A newer database schema is refused without migration, deletion or modification");
+            var negative = Path.Combine(root, "negative.sqlite");
+            using (var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = negative, Pooling = false }.ToString()))
+            { db.Open(); using var cmd = db.CreateCommand(); cmd.CommandText = "PRAGMA user_version=-1; CREATE TABLE unrelated (value TEXT);"; cmd.ExecuteNonQuery(); }
+            before = File.ReadAllBytes(negative); rejected = false;
+            try { using var unsupported = new HistoryStore(new(negative)); } catch (FormatException) { rejected = true; } catch (SqliteException) { }
+            check(rejected && before.SequenceEqual(File.ReadAllBytes(negative)), "Negative/unknown schema versions are rejected before any writer PRAGMA changes the file");
             var corrupt = Path.Combine(root, "corrupt.sqlite"); File.WriteAllText(corrupt, "not a database"); rejected = false;
             try { using var invalid = new HistoryStore(new(corrupt)); } catch (SqliteException) { rejected = true; }
             check(rejected && File.ReadAllText(corrupt) == "not a database", "Corrupt history is reported without replacing the user's file");
