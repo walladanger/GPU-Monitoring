@@ -1,0 +1,28 @@
+# Desktop compilation coverage; windows-build.yml owns native QA and the single release installer.
+name: .NET Core Desktop
+on:
+  push:
+    branches: [main]
+    paths: ['src/GpuMonitor/**', 'tests/**', '.github/workflows/dotnet-desktop.yml']
+  pull_request:
+    branches: [main]
+    paths: ['src/GpuMonitor/**', 'tests/**', '.github/workflows/dotnet-desktop.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build actual WPF application
+        run: dotnet build src/GpuMonitor/GpuMonitor.csproj -c ${{ matrix.configuration }}
+      - name: Run actual production-source regression checks
+        run: dotnet run --project tests/GpuMonitor.TelemetryChecks -c ${{ matrix.configuration }}
