@@ -93,6 +93,13 @@ jobs:
           ./tests/acceptance/TargetAcceptanceChecks.ps1
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tests/acceptance/TargetAcceptanceChecks.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5 acceptance checks failed' }
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $compiler)) { throw 'Inno Setup is missing from the Windows runner' }
+          & $compiler src/GpuMonitor/packaging/GpuMonitor.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
       - name: Verify packaged acceptance runner on GPU-free Windows CI
         shell: pwsh
         run: |
@@ -132,13 +139,6 @@ jobs:
           name: GPU-Monitor-Overview-Verification
           path: src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/overview-verification/
           if-no-files-found: warn
-      - name: Compile installer
-        shell: pwsh
-        run: |
-          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
-          if (-not (Test-Path $compiler)) { throw 'Inno Setup is missing from the Windows runner' }
-          & $compiler src/GpuMonitor/packaging/GpuMonitor.iss
-          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
