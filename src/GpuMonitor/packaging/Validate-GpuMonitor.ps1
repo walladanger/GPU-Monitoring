@@ -95,7 +95,9 @@ try {
         @{ Flag = '--verify-overview'; Result = 'overview-verification\result.txt'; Timeout = 120 },
         @{ Flag = '--verify-monitoring'; Result = 'monitoring-verification.txt'; Timeout = 30 },
         @{ Flag = '--verify-workspace'; Result = 'overview-verification\workspace-result.txt'; Timeout = 45 },
-        @{ Flag = '--verify-charts'; Result = 'overview-verification\charts-result.txt'; Timeout = 30 }
+        @{ Flag = '--verify-charts'; Result = 'overview-verification\charts-result.txt'; Timeout = 30 },
+        @{ Flag = '--verify-persistence'; Result = 'overview-verification\persistence-result.txt'; Timeout = 45 },
+        @{ Flag = '--verify-tray'; Result = 'overview-verification\tray-result.txt'; Timeout = 30 }
     )) {
         $path = Join-Path $appDirectory $gate.Result
         try {
@@ -123,9 +125,9 @@ try {
     } else { Add-Result 'Target hardware acceptance' 'N/A' 'Explicit zero-GPU diagnostic run; no dual-3090 acceptance.' }
 } catch { Add-Result 'Acceptance runner' 'FAIL' $_.Exception.Message }
 finally {
-    Add-Result 'Physical pointer / keyboard' 'PENDING' 'On the live app: title-drag reorder, resize preview/Escape/commit, click a chart then Ctrl+Space/Left/Right/Home, Ctrl+wheel; confirm undo and presets.'
+    Add-Result 'Physical pointer / keyboard' 'PENDING' 'On the live app: tray hover/dismiss/configure, title-drag reorder, resize preview/Escape/commit, click a chart then Ctrl+Space/Left/Right/Home, Ctrl+wheel; confirm undo and presets.'
     Add-Result 'DPI / monitors / suspend' 'PENDING' 'Move the live app across monitors at their actual scaling, resize ultrawide/fullscreen, suspend/resume and confirm precise hit targets and readable labels.'
-    Add-Result 'Human visual approval / install-uninstall' 'PENDING' 'Compare against approved references; verify shortcut, tray, clean close and installer/uninstall on the target machine. No automatic signoff.'
+    Add-Result 'Human visual approval / install-uninstall' 'PENDING' 'Compare against approved references and approve tray backdrop/readability; verify shortcut, tray, clean close and installer/uninstall on the target machine. No automatic signoff.'
     $performance | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $run 'process-measurements.json') -Encoding UTF8
     $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $run 'acceptance.json') -Encoding UTF8
     $failed = @($results | Where-Object Status -eq 'FAIL').Count

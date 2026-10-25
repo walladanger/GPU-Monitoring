@@ -15,7 +15,7 @@ internal static class LiveOverviewChecks
     {
         if (expectedCount is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(expectedCount));
         var output = Path.Combine(AppContext.BaseDirectory, "target-verification"); Directory.CreateDirectory(output);
-        var app = new Application(); var window = new OverviewWindow();
+        var app = new Application(); var window = new OverviewWindow(preferences: new Settings());
         var elapsed = Stopwatch.StartNew(); var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         bool finished = false;
         void Finish(Exception? error)
