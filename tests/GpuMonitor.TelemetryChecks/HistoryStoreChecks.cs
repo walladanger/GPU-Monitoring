@@ -40,6 +40,12 @@ internal static class HistoryStoreChecks
                 var catalog = store.Catalog("exact");
                 check(catalog.Single().Selection == selection && catalog.Single().Unit == "MiB" && store.Catalog("no such sensor").Count == 0,
                     "Historical picker searches actual stored sensors independently of currently connected devices");
+                var other = d with { Id = "GPU-second", DisplayIndex = "1" };
+                store.Append([new(other, "memory.used", now, 4096)], definitions, now);
+                var identities = store.Catalog("exact");
+                check(identities.Count == 2 && identities.Select(s => s.ToString()).Distinct().Count() == 2 &&
+                    store.Read(selection with { DeviceId = "GPU-second" }, "MiB", now.AddMinutes(-1), now).Single().Sample.Value == 4096,
+                    "Identical GPU models have distinct historical picker labels and retain their selected device's values");
             }
             var future = Path.Combine(root, "future.sqlite");
             using (var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = future, Pooling = false }.ToString()))
