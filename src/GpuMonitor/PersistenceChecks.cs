@@ -48,9 +48,16 @@ internal static class PersistenceChecks
                 await browser.LoadMeasurementsAsync();
                 Require(browser.Plot.VisibleSamples.Count >= 2 && browser.Plot.VisibleSamples.All(s => s.Value == 42.125) && browser.Status.Contains("archived"),
                     "Saved-history browser did not load its selected recorded device/time range.");
+                browser.Sensors.IsDropDownOpen = true; await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ContextIdle);
+                Require(browser.Sensors.Template.FindName("PART_Popup", browser.Sensors) is System.Windows.Controls.Primitives.Popup { IsOpen: true },
+                    "Historical sensor dropdown did not open through its native combo control.");
+                browser.Sensors.IsDropDownOpen = false;
                 await Task.Delay(1500);
                 browser.Plot.SavePng(Path.Combine(output, "stored-history-chart.png"));
                 var bitmap = OverviewChecks.Capture((FrameworkElement)browser.Content);
+                var origin = browser.Sensors.TranslatePoint(new Point(6, browser.Sensors.ActualHeight - 4), (FrameworkElement)browser.Content);
+                var pixel = new byte[4]; bitmap.CopyPixels(new Int32Rect((int)origin.X, (int)origin.Y, 1, 1), pixel, 4, 0);
+                Require(pixel[0] < 120 && pixel[1] < 100 && pixel[2] < 100, "Historical selector used an unreadable light surface beneath white text.");
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
                 using (var stream = File.Create(Path.Combine(output, "stored-history-browser.png"))) encoder.Save(stream);
                 browser.Close();
