@@ -76,8 +76,13 @@ public sealed class Inventory
     }
 }
 
-public sealed class NvidiaCollector
+public sealed class NvidiaCollector : ITelemetryProvider
 {
+    public string SourceId => NvidiaTelemetry.SourceId;
+    public IReadOnlyList<MetricDefinition> Definitions => NvidiaTelemetry.Definitions;
+    async Task<TelemetryBatch> ITelemetryProvider.ReadAsync(CancellationToken cancellation) =>
+        NvidiaTelemetry.Normalize(await ReadAsync(cancellation));
+
     private readonly string executable = FindExecutable();
     private static string FindExecutable()
     {
