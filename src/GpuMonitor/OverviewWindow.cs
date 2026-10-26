@@ -11,7 +11,8 @@ namespace GpuMonitor;
 
 public sealed class OverviewWindow : Window
 {
-    private readonly TelemetrySession session = new(new NvidiaCollector());
+    private readonly TelemetrySession fixtureSession = new(new NvidiaCollector());
+    private readonly DashboardTelemetry? monitoring;
     private readonly Grid root;
     private readonly Dictionary<string, GpuOverviewCard> cards = [];
     private readonly Dictionary<string, string> deviceColors = [];
@@ -25,17 +26,16 @@ public sealed class OverviewWindow : Window
     private readonly WrapPanel legend = new() { HorizontalAlignment = HorizontalAlignment.Center };
     private readonly TelemetryPlot comparison = new("%", 100) { Height = 220 };
     private readonly DispatcherTimer timer = new();
-    private readonly CancellationTokenSource stop = new();
     private readonly Settings settings;
     private readonly System.Windows.Forms.NotifyIcon? tray;
     private readonly bool savePreferences;
-    private bool reading, closed, paused, details, collapsed;
+    private bool reading, closed, closing, paused, details, collapsed;
     private string[] comparisonIds = [];
     private DateTimeOffset viewTime;
     private readonly List<Button> rangeButtons = [];
     private static readonly string[] Colors = ["#2B82F8", "#A66CF2", "#33DF32", "#FFBA4D", "#F45A5A", "#39BCD2", "#DBCE32", "#E977BD"];
 
-    public OverviewWindow(bool startMonitoring = true)
+    public OverviewWindow(bool startMonitoring = true, CollectorConfiguration? configuration = null, DashboardTelemetry? telemetry = null)
     {
         settings = startMonitoring ? Settings.Load() : new Settings(); savePreferences = startMonitoring;
         Title = "GPU Monitor"; Width = 1536; Height = 1024; MinWidth = 680; MinHeight = 540;
@@ -66,17 +66,29 @@ public sealed class OverviewWindow : Window
         var footer = OverviewTheme.Text("Read-only monitoring  ·  Right-click a graph to export its measured data", 12, OverviewTheme.Muted);
         footer.TextWrapping = TextWrapping.Wrap; body.Children.Add(footer);
         gpuGrid.SizeChanged += (_, _) => Reflow();
-        timer.Interval = TimeSpan.FromSeconds(settings.RefreshSeconds); timer.Tick += async (_, _) => await RefreshAsync();
+        timer.Interval = TimeSpan.FromSeconds(settings.RefreshSeconds); timer.Tick += (_, _) => Render(DateTimeOffset.UtcNow);
         if (startMonitoring)
         {
+            // Preserve NVIDIA-only normal launch. Extra hardware/runtime sources require --sources.
+            monitoring = telemetry ?? (configuration == null ? new DashboardTelemetry([new NvidiaCollector()]) : DashboardTelemetry.Create(configuration));
             tray = new System.Windows.Forms.NotifyIcon { Text = "GPU Monitor", Icon = System.Drawing.SystemIcons.Application, Visible = true };
             var menu = new System.Windows.Forms.ContextMenuStrip(); menu.Items.Add("Open GPU Monitor", null, (_, _) => Dispatcher.Invoke(Restore));
             menu.Items.Add("Exit", null, (_, _) => Dispatcher.Invoke(Close)); tray.ContextMenuStrip = menu;
             tray.DoubleClick += (_, _) => Dispatcher.Invoke(Restore);
-            Loaded += async (_, _) => { await RefreshAsync(); if (!closed && !paused) timer.Start(); };
+            Loaded += async (_, _) => await UpdateMonitoringAsync();
         }
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized && settings.MinimizeToTray) Hide(); };
-        Closed += (_, _) => { closed = true; timer.Stop(); stop.Cancel(); tray?.Dispose(); };
+        Closing += async (_, e) =>
+        {
+            if (closing || monitoring == null) return;
+            e.Cancel = true;
+            if (closed) return;
+            closed = true; timer.Stop();
+            try { await monitoring.DisposeAsync(); }
+            catch (Exception error) { System.Diagnostics.Trace.TraceError(error.ToString()); }
+            finally { closing = true; _ = Dispatcher.BeginInvoke(new Action(Close)); }
+        };
+        Closed += (_, _) => { closed = true; timer.Stop(); tray?.Dispose(); };
     }
 
     private UIElement CreateHeader()
@@ -116,13 +128,13 @@ public sealed class OverviewWindow : Window
     private void OpenSettings()
     {
         var menu = OverviewTheme.Menu();
-        menu.Items.Add(OverviewTheme.MenuCommand(paused ? "Resume monitoring" : "Pause monitoring", () =>
-        { paused = !paused; if (paused) timer.Stop(); else timer.Start(); Render(viewTime); }));
+        menu.Items.Add(OverviewTheme.MenuCommand(paused ? "Resume monitoring" : "Pause monitoring", async () =>
+        { paused = !paused; await UpdateMonitoringAsync(); }));
         menu.Items.Add(OverviewTheme.MenuCommand("Rescan now", async () => await RefreshAsync()));
         var refresh = new MenuItem { Header = "Refresh interval" };
         foreach (int seconds in new[] { 1, 2, 5, 10 })
         {
-            var item = OverviewTheme.MenuCommand($"{seconds} second{(seconds == 1 ? "" : "s")}", () => { settings.RefreshSeconds = seconds; timer.Interval = TimeSpan.FromSeconds(seconds); Save(); });
+            var item = OverviewTheme.MenuCommand($"{seconds} second{(seconds == 1 ? "" : "s")}", async () => { settings.RefreshSeconds = seconds; Save(); await UpdateMonitoringAsync(); });
             item.IsCheckable = true; item.IsChecked = settings.RefreshSeconds == seconds; refresh.Items.Add(item);
         }
         menu.Items.Add(refresh);
@@ -133,19 +145,33 @@ public sealed class OverviewWindow : Window
     private void Save() { if (!savePreferences) return; try { settings.Save(); } catch (Exception error) { MessageBox.Show(this, error.Message, "Settings could not be saved"); } }
     private void Restore() { Show(); WindowState = WindowState.Normal; Activate(); }
 
+    private async Task UpdateMonitoringAsync()
+    {
+        if (closed) return;
+        timer.Stop();
+        try { if (monitoring != null) await monitoring.SetMonitoringAsync(!paused, TimeSpan.FromSeconds(settings.RefreshSeconds)); }
+        catch (Exception error) { if (!closed) MessageBox.Show(this, error.Message, "Monitoring could not be updated"); }
+        if (closed) return;
+        timer.Interval = TimeSpan.FromSeconds(settings.RefreshSeconds);
+        if (!paused) timer.Start();
+        Render(paused ? viewTime : DateTimeOffset.UtcNow);
+    }
+
     private async System.Threading.Tasks.Task RefreshAsync()
     {
         if (reading || closed) return; reading = true;
-        try { await session.RefreshAsync(stop.Token); }
-        catch (OperationCanceledException) when (closed) { return; }
-        catch (Exception) { /* The session retains prior readings and exposes the actual failure. */ }
+        try { if (monitoring != null) await monitoring.RefreshAsync(); }
+        catch (Exception error) { if (!closed) MessageBox.Show(this, error.Message, "Monitoring refresh failed"); }
         finally { reading = false; }
         if (!closed) Render(DateTimeOffset.UtcNow);
     }
 
     private void Render(DateTimeOffset now)
     {
-        if (now == default) now = DateTimeOffset.UtcNow; viewTime = now; session.Prune(now);
+        if (now == default) now = DateTimeOffset.UtcNow; viewTime = now;
+        var session = monitoring?.Snapshot(NvidiaTelemetry.SourceId).Single() ?? new ProviderSnapshot(
+            NvidiaTelemetry.SourceId, fixtureSession.Health, fixtureSession.Error, fixtureSession.LastSuccess,
+            fixtureSession.Current, fixtureSession.HistorySnapshot(), fixtureSession.Definitions);
         var readings = session.Current == null ? Array.Empty<GpuReading>() : NvidiaSnapshot.Readings(session.Current).ToArray();
         var ids = readings.Select(g => g.Id).ToHashSet();
         foreach (var id in cards.Keys.Where(id => !ids.Contains(id)).ToArray()) { gpuGrid.Children.Remove(cards[id]); cards.Remove(id); deviceColors.Remove(id); }
@@ -167,7 +193,7 @@ public sealed class OverviewWindow : Window
             comparisonIds = readings.Select(g => g.Id).ToArray();
             comparison.SetSeries(readings.Select(g => ($"GPU {g.Index}", deviceColors[g.Id])).ToArray());
         }
-        comparison.Update(readings.Select(g => session.History(g.Id, "utilization.gpu")).ToArray(), now, settings.WindowMinutes);
+        comparison.Update(readings.Select(g => session.Series(g.Id, "utilization.gpu")).ToArray(), now, settings.WindowMinutes);
         comparison.Opacity = session.Health == ProviderHealth.Stale ? .5 : 1;
         legend.Children.Clear();
         for (int i = 0; i < readings.Length; i++)
@@ -195,11 +221,14 @@ public sealed class OverviewWindow : Window
     private void SetCursor(DateTimeOffset? time) { comparison.SetCursor(time); foreach (var card in cards.Values) foreach (var plot in card.Plots) plot.SetCursor(time); }
 
     internal void ApplyFixture(IReadOnlyList<GpuReading> readings, DateTimeOffset now, bool render = true)
-    { session.Apply(NvidiaTelemetry.Normalize(readings), now); if (render) Render(now); }
+    { fixtureSession.Apply(NvidiaTelemetry.Normalize(readings), now); if (render) Render(now); }
     internal void VerifyInventory(int expected)
     {
         if (cards.Count != expected || comparison.SeriesCount != expected) throw new InvalidOperationException("Overview must show exactly the detected GPU count.");
     }
     internal IReadOnlyList<TelemetryPlot> VerifyPlots => cards.Values.SelectMany(c => c.Plots).ToArray();
     internal FrameworkElement VerificationRoot => root;
+    internal int VerificationDeviceCount => cards.Count;
+    internal async Task VerifyPauseAsync(bool value) { paused = value; await UpdateMonitoringAsync(); }
+    internal Task VerifyRescanAsync() => RefreshAsync();
 }

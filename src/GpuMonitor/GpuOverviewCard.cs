@@ -39,7 +39,7 @@ internal sealed class GpuOverviewCard : Border
         var row = new DockPanel(); DockPanel.SetDock(value, Dock.Right); row.Children.Add(value);
         row.Children.Add(OverviewTheme.Text(label, 13, OverviewTheme.Muted)); return row;
     }
-    public void Update(GpuReading gpu, TelemetrySession session, int minutes, DateTimeOffset now, bool showDetails)
+    public void Update(GpuReading gpu, ProviderSnapshot session, int minutes, DateTimeOffset now, bool showDetails)
     {
         title.Text = $"GPU {gpu.Index}"; model.Text = gpu.Name.Replace("NVIDIA GeForce ", "");
         static string Value(double? value, string unit) => value.HasValue ? $"{value:0.#}{unit}" : "N/A";
@@ -49,8 +49,8 @@ internal sealed class GpuOverviewCard : Border
         if (Usage.SeriesCount == 0) { Usage.SetSeries(new[] { ($"GPU {gpu.Index}", "#33DF32") }); Memory.SetSeries(new[] { ($"GPU {gpu.Index}", "#2B82F8") }); }
         Usage.SetName(0, $"GPU {gpu.Index}"); Memory.SetName(0, $"GPU {gpu.Index}");
         Memory.SetMaximum(gpu.Metrics["memory.total"] / 1024);
-        Usage.Update(new[] { session.History(gpu.Id, "utilization.gpu") }, now, minutes);
-        Memory.Update(new[] { session.History(gpu.Id, "memory.used") }, now, minutes, 1024);
+        Usage.Update(new[] { session.Series(gpu.Id, "utilization.gpu") }, now, minutes);
+        Memory.Update(new[] { session.Series(gpu.Id, "memory.used") }, now, minutes, 1024);
         details.Text = $"{gpu.Id} · PCI {gpu.Bus}\nGraphics {Value(gpu.Metrics["clocks.current.graphics"], " MHz")} · Memory {Value(gpu.Metrics["clocks.current.memory"], " MHz")}";
         details.Visibility = showDetails ? Visibility.Visible : Visibility.Collapsed;
         Opacity = session.Health == ProviderHealth.Stale ? .5 : 1;

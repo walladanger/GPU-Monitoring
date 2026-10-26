@@ -51,3 +51,9 @@ Remaining scope and acceptance:
 
 The original design source is preserved independently in PR #17. Use that exact
 image and the user's annotation notes; do not generate replacement mockups.
+
+## Independent engine integration
+
+Provider collection now runs independently of the WPF render timer. The existing shell, palette, card arrangement and chart styling are preserved. Default source selection remains NVIDIA-only. `--sources <local configuration>` explicitly opts into the backend provider set; additional hardware/runtime chart panels remain a separate workspace task.
+
+Pause, rescan, interval changes and window close now use the shared collection owner. The native `--verify-monitoring` gate exercises this actual window lifecycle with synthetic providers; existing fixture screenshots still exercise identical layout/data cases. See [backend lifecycle and setup](GPU_MONITOR_V2_BACKEND.md#dashboard-engine-lifecycle).

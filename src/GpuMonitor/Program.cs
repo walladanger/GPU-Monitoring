@@ -54,6 +54,7 @@ public static class Program
             return;
         }
         if (args.Contains("--verify-overview")) { OverviewChecks.Run(); return; }
+        if (args.Contains("--verify-monitoring")) { OverviewMonitoringChecks.Run(); return; }
         if (args.Contains("--self-test"))
         {
             try { SmokeChecks.Run(); }
@@ -63,7 +64,21 @@ public static class Program
         using var instance = new Mutex(true, "Local\\GpuMonitor", out bool firstInstance);
         if (!firstInstance) { System.Windows.MessageBox.Show("GPU Monitor is already running. Open it from its tray icon.", "GPU Monitor"); return; }
         var app = new Application();
-        Window dashboard = args.Contains("--legacy-ui") || args.Contains("--verify-ui") ? new Dashboard() : new OverviewWindow();
+        CollectorConfiguration? configuration = null;
+        try
+        {
+            int index = Array.IndexOf(args, "--sources");
+            if (index >= 0)
+            {
+                if (index + 1 >= args.Length || args[index + 1].StartsWith("--")) throw new ArgumentException("Missing value for --sources.");
+                if (args.Contains("--legacy-ui") || args.Contains("--verify-ui")) throw new ArgumentException("Configured sources require the Overview dashboard.");
+                configuration = CollectorConfiguration.Load(args[index + 1]);
+            }
+        }
+        catch (Exception error) { MessageBox.Show(error.Message, "Monitoring configuration could not be loaded"); instance.ReleaseMutex(); Environment.ExitCode = 2; return; }
+        Window dashboard;
+        try { dashboard = args.Contains("--legacy-ui") || args.Contains("--verify-ui") ? new Dashboard() : new OverviewWindow(configuration: configuration); }
+        catch (Exception error) { MessageBox.Show(error.Message, "Monitoring could not be started"); instance.ReleaseMutex(); Environment.ExitCode = 2; return; }
         if (args.Contains("--verify-ui"))
         {
             var verify = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };

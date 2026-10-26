@@ -57,6 +57,7 @@ TelemetryContractChecks.Run(Check);
 PlotDataChecks.Run(Check);
 await TelemetrySessionChecks.Run(Check);
 await TelemetryEngineChecks.Run(Check);
+await DashboardTelemetryChecks.Run(Check);
 await SystemCollectorChecks.Run(Check);
 await CpuCoreChecks.Run(Check);
 await ProcessCollectorChecks.Run(Check);
