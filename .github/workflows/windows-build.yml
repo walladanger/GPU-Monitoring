@@ -31,7 +31,7 @@ jobs:
       - name: Verify discovery and native panel behavior
         shell: pwsh
         run: |
-          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows/GpuMonitor.exe
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
           $process = Start-Process $exe -ArgumentList '--self-test' -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw 'Application checks failed' }
           Get-Content (Join-Path (Split-Path $exe) 'self-test-result.txt')
