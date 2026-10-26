@@ -6,8 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/GpuMonitor/PlotData.cs" Link="PlotData.cs" />
     <!-- Compile the production collector/parser directly; no GPU or WPF required. -->
     <Compile Include="../../src/GpuMonitor/Telemetry.cs" Link="Telemetry.cs" />
     <Compile Include="../../src/GpuMonitor/TelemetryContracts.cs" Link="TelemetryContracts.cs" />
+    <Compile Include="../../src/GpuMonitor/TelemetrySession.cs" Link="TelemetrySession.cs" />
   </ItemGroup>
 </Project>
