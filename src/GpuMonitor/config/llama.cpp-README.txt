@@ -1,0 +1,23 @@
+llama.cpp metrics adapter
+
+This optional preset reads http://127.0.0.1:8080/metrics. Start your existing
+llama-server with --metrics enabled; edit Endpoint if you use another port.
+GPU Monitor never starts, installs, loads a model or reconfigures the server.
+LM Studio's OpenAI-compatible endpoint is not a llama.cpp metrics endpoint.
+
+From PowerShell in the installed/portable app directory:
+
+$p = Start-Process .\GpuMonitor.exe -ArgumentList '--collect ".\capture" --duration 60 --interval 2 --sources ".\config\llamacpp.sources.json"' -Wait -PassThru
+$p.ExitCode
+
+Inspect runtime:llamacpp-local in telemetry.json or telemetry.txt. Readings
+include prompt/output token counters, interval token rates, running requests
+and deferred requests. Rates warm up after first connection, resets and
+reconnects. Missing measurements stay unavailable. A zero exit code means
+at least one source is live, not necessarily the llama.cpp source.
+
+The shared bounded transport sends only metrics GET requests. It does not
+capture prompts or credentials. Current configuration rejects URL query
+parameters, so llama.cpp router-mode /metrics?model=... is not supported.
+Use a standalone model server endpoint. Normal launch enables no runtime
+endpoint.

@@ -1,3 +1,8 @@
 __pycache__/
 *.pyc
 gpu-log.csv
+**/bin/
+**/obj/
+src/GpuMonitor/publish/
+src/GpuMonitor/artifacts/
+src/GpuMonitor/GPU-Monitor-Windows-x64.zip

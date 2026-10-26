@@ -1,5 +1,8 @@
 # GPU Monitor 2.0 — Faithful UI Reproduction & Adaptive Hardware Monitoring
 
+> Historical 14-phase plan. The [15-phase master plan](GPU_MONITOR_V2_MASTER_PLAN.md)
+> is the current scope; see the [baseline audit and issue mapping](GPU_MONITOR_V2_BASELINE.md).
+
 **Repository:** [walladanger/GPU-Monitoring](https://github.com/walladanger/GPU-Monitoring)  
 **Status:** Production backlog (not implemented)  
 **Authoritative reference:** The originally generated **“SGLang Monitor”** 1536×1024 screenshot selected in ChatGPT on 2026-10-21. Add it unmodified at `docs/design/gpu-monitor-v2-reference.png` before visual implementation. **Do not substitute** the simpler browser-dashboard preview or generate a different mockup. The image itself is not yet committed to this repo.

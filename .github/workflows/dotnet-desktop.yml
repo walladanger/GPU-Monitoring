@@ -1,7 +1,4 @@
-# Compiles the WPF app in both configurations on every change.
-# windows-build.yml owns the native self-test, packaging and the single installer;
-# this workflow replaces the unconfigured GitHub template (placeholder solution
-# paths, .NET 8, MSIX signing secrets) that could never pass.
+# Desktop compilation coverage; windows-build.yml owns native QA and the single release installer.
 name: .NET Core Desktop
 on:
   push:
@@ -10,7 +7,6 @@ on:
   pull_request:
     branches: [main]
     paths: ['src/GpuMonitor/**', 'tests/**', '.github/workflows/dotnet-desktop.yml']
-  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -26,5 +22,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Build WPF application
+      - name: Build actual WPF application
         run: dotnet build src/GpuMonitor/GpuMonitor.csproj -c ${{ matrix.configuration }}
+      - name: Run actual production-source regression checks
+        run: dotnet run --project tests/GpuMonitor.TelemetryChecks -c ${{ matrix.configuration }}

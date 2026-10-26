@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GPU Monitor workspace preset version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Version",
+    "Name",
+    "Panels"
+  ],
+  "properties": {
+    "Version": {
+      "const": 1
+    },
+    "Name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "Panels": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/panel"
+      }
+    }
+  },
+  "$defs": {
+    "series": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Source",
+        "DeviceId",
+        "MetricKey"
+      ],
+      "properties": {
+        "Source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+        },
+        "DeviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+        },
+        "MetricKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+        },
+        "Axis": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        }
+      }
+    },
+    "panel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Id",
+        "Title",
+        "WidthSlots",
+        "HeightRows",
+        "Chart",
+        "Series"
+      ],
+      "properties": {
+        "Id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "Title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+        },
+        "WidthSlots": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "HeightRows": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "Chart": {
+          "enum": [
+            "line",
+            "area"
+          ]
+        },
+        "Series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/series"
+          }
+        }
+      }
+    }
+  },
+  "$comment": "Runtime validation also rejects blank-only strings, duplicate panel IDs and duplicate (Source, DeviceId, MetricKey) bindings within a panel. Preset bytes are limited to 256 KiB. Axis units are resolved against live provider definitions."
+}
