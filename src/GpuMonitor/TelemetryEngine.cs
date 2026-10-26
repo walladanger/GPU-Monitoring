@@ -22,9 +22,11 @@ public sealed class TelemetryEngine
 
     private readonly Dictionary<string, Source> sources;
     private int running;
+    private readonly Action<TelemetryBatch, IReadOnlyList<MetricDefinition>>? batchObserved;
 
-    public TelemetryEngine(IEnumerable<ITelemetryProvider> providers)
+    public TelemetryEngine(IEnumerable<ITelemetryProvider> providers, Action<TelemetryBatch, IReadOnlyList<MetricDefinition>>? batchObserved = null)
     {
+        this.batchObserved = batchObserved;
         sources = providers.ToDictionary(p => p.SourceId, p => new Source(p), StringComparer.Ordinal);
         if (sources.Count == 0) throw new ArgumentException("At least one provider is required.", nameof(providers));
     }
@@ -39,7 +41,7 @@ public sealed class TelemetryEngine
         finally { Volatile.Write(ref running, 0); }
     }
 
-    private static async Task PollAsync(Source source, TimeSpan interval, CancellationToken cancellation)
+    private async Task PollAsync(Source source, TimeSpan interval, CancellationToken cancellation)
     {
         using var timer = new PeriodicTimer(interval);
         do
@@ -57,7 +59,7 @@ public sealed class TelemetryEngine
         finally { Volatile.Write(ref running, 0); }
     }
 
-    private static async Task CollectAsync(Source source, CancellationToken cancellation)
+    private async Task CollectAsync(Source source, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();
         try
@@ -66,12 +68,29 @@ public sealed class TelemetryEngine
             var batch = await source.Session.ReadAsync(cancellation);
             cancellation.ThrowIfCancellationRequested();
             lock (source.Gate) source.Session.Apply(batch, DateTimeOffset.UtcNow);
+            Observe(source, batch);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
         catch (Exception error)
         {
-            lock (source.Gate) source.Session.MarkStale(error.Message, DateTimeOffset.UtcNow);
+            TelemetryBatch? gaps = null;
+            lock (source.Gate)
+            {
+                var observedAt = DateTimeOffset.UtcNow;
+                source.Session.MarkStale(error.Message, observedAt);
+                if (source.Session.Current is { } current)
+                    gaps = new(current.Devices, current.Capabilities.Select(c => c with { Availability = MetricAvailability.Unavailable }).ToArray(),
+                        current.Samples.Select(s => new TelemetrySample(s.Device, s.MetricKey, observedAt, null)).ToArray(), []);
+            }
+            if (gaps != null) Observe(source, gaps);
         }
+    }
+
+    private void Observe(Source source, TelemetryBatch batch)
+    {
+        // Optional sinks may not turn a successful measurement into a stale provider.
+        try { batchObserved?.Invoke(batch, source.Session.Definitions); }
+        catch (Exception error) { System.Diagnostics.Trace.TraceError("Telemetry observer: " + error.Message); }
     }
 
     public IReadOnlyList<ProviderSnapshot> Snapshot(string? sourceId = null)
