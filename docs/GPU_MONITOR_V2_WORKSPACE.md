@@ -26,7 +26,7 @@ Unit definitions come from the selected provider. Different units on one axis pr
 
 Portable checks round-trip real JSON files, preserve order/dimensions/bindings, reject invalid names/versions/duplicate identities, enforce bounded reads, preserve existing data on cancelled writes, and resolve normalized NVIDIA fixtures through UUID index changes, disappearance, stale state and reappearance. Separate tests cover missing definitions, unavailable values and incompatible-axis units.
 
-The native controls below now connect this contract to the annotated Add Panel/metric picker and custom workspace, including menu/keyboard sizing and ordering. Mouse drag/resize grips, merge/split and full interaction/visual acceptance remain open. Missing selections must remain clearly unavailable; the primary GPU region keeps one card per actual device. Do not mark the entire Phase 06 complete.
+The native controls below now connect this contract to the annotated Add Panel/metric picker and custom workspace, including menu/keyboard sizing and ordering. Mouse drag/resize grips and merge/split are implemented in the subsequent interaction increment; full target-machine interaction/visual acceptance remains open. Missing selections must remain clearly unavailable; the primary GPU region keeps one card per actual device. Do not mark the entire Phase 06 complete.
 
 ## Native panel controls
 
@@ -41,6 +41,6 @@ The default source set remains NVIDIA-only. Other hardware/runtime metrics becom
 
 Missing source/device/metric bindings remain in both the editor and saved layout. Reappearing UUIDs resolve again. Incompatible same-axis units are rejected by the picker or displayed as an explicit panel error on import. Version-1 secondary-axis selections are retained but show an unsupported-renderer message; this first UI increment does not silently plot incompatible units together or rewrite such selections.
 
-Mouse drag handles, freeform resize grips, merge/split, chart pan/zoom, additional chart families and secondary-axis rendering remain later increments. This implements menu/keyboard size and order controls, not the complete Phase 06 interaction scope.
+The subsequent [panel interaction increment](GPU_MONITOR_V2_PANEL_INTERACTIONS.md) adds title dragging, snapped resize grips, merge/split and duplication while retaining these menu/keyboard controls. Chart pan/zoom, additional chart families and secondary-axis rendering remain later increments; target-machine interaction and visual acceptance are still open.
 
 `--verify-workspace` runs the actual Add Panel modal, search, checkbox and Apply flow in WPF, then exercises chart projection, editing/order/sizing, undo, named save/load, malformed-file preservation and missing/reappearing GPU bindings. It captures `overview-verification/workspace-controls-1536.png` and validates actual colored native chart traces and selected raw sample counts. Data is explicitly synthetic. Existing 0/1/2/4/8-GPU and narrow-view checks still run. These checks are not physical dual-3090 validation or human visual signoff.
