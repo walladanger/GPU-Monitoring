@@ -28,6 +28,8 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Build
         run: dotnet build src/GpuMonitor/GpuMonitor.csproj -c Release
+      - name: Verify SGLang and vLLM adapters over real loopback HTTP on Windows
+        run: dotnet run --project tests/GpuMonitor.TelemetryChecks -c Release
       - name: Verify discovery and native panel behavior
         shell: pwsh
         run: |
@@ -37,7 +39,40 @@ jobs:
           Get-Content (Join-Path (Split-Path $exe) 'self-test-result.txt')
       - name: Publish runtime-bundled ZIP
         shell: pwsh
-        run: ./src/GpuMonitor/packaging/Build-Package.ps1
+        run: |
+          ./src/GpuMonitor/packaging/Build-Package.ps1
+          if (-not (Test-Path 'src/GpuMonitor/publish/config/sglang-vllm.sources.json')) { throw 'Packaged SGLang/vLLM preset missing' }
+          if (-not (Test-Path 'src/GpuMonitor/publish/config/SGLang-vLLM-README.txt')) { throw 'Packaged adapter instructions missing' }
+      - name: Verify backend collection without a dashboard
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $output = Join-Path $env:RUNNER_TEMP 'gpu-headless'
+          $feed = Join-Path $env:RUNNER_TEMP 'gpu-usage-fixture.jsonl'
+          @{ id = 'fixture-request'; timestamp = (Get-Date).ToUniversalTime().ToString('o'); model = 'fixture-model'; durationMs = 2000; usage = @{ prompt_tokens = 100; completion_tokens = 20 }; messages = 'SECRET_FIXTURE_CONTENT' } | ConvertTo-Json -Compress -Depth 5 | Set-Content $feed
+          $config = Join-Path $env:RUNNER_TEMP 'gpu-sources-fixture.json'
+          @{ Version = 1; Feeds = @(@{ Enabled = $true; Id = 'fixture'; Kind = 'usage'; Path = $feed }) } | ConvertTo-Json -Depth 5 | Set-Content $config
+          $process = Start-Process $exe -ArgumentList @('--collect', $output, '--duration', '6', '--interval', '1', '--sources', $config) -PassThru
+          if (-not $process.WaitForExit(20000)) { $process.Kill(); throw 'Backend shutdown timed out' }
+          if ($process.ExitCode -ne 0) { throw 'Backend collection failed' }
+          $sources = Get-Content (Join-Path $output 'telemetry.json') -Raw | ConvertFrom-Json
+          $sources | Select-Object Source, Health, Error | ConvertTo-Json
+          $system = $sources | Where-Object Source -eq 'windows-system'
+          if ($system.Health -ne 'Live') { throw 'Windows system collector is not live' }
+          $ram = $system.Current.Samples | Where-Object MetricKey -eq 'ram.total'
+          $cpu = $system.History | Where-Object { $_.MetricKey -eq 'cpu.usage' -and $null -ne $_.Value }
+          if ($ram.Value -le 0 -or $cpu.Count -lt 1) { throw 'Missing measured CPU/RAM telemetry' }
+          $disks = $sources | Where-Object Source -eq 'windows-disks'
+          $diskRead = $disks.History | Where-Object { $_.MetricKey -eq 'disk.read' -and $null -ne $_.Value }
+          if ($disks.Health -ne 'Live' -or $diskRead.Count -lt 1) { throw 'Missing physical disk throughput samples' }
+          $processes = $sources | Where-Object Source -eq 'windows-processes'
+          if ($processes.Health -ne 'Live' -or -not ($processes.Current.Devices | Where-Object DisplayIndex -eq $process.Id)) { throw 'Collector process missing from inventory' }
+          $usage = $sources | Where-Object Source -eq 'usage:fixture'
+          if ($usage.Health -ne 'Live' -or $usage.EventHistory.Count -ne 1) { throw 'Configured usage adapter did not ingest its fixture' }
+          if ((Get-Content (Join-Path $output 'telemetry.json') -Raw).Contains('SECRET_FIXTURE_CONTENT')) { throw 'Metadata export retained excluded content' }
+          if (-not (Test-Path (Join-Path $output 'events.csv'))) { throw 'Missing event/measurement CSV export' }
+          if (-not (Test-Path (Join-Path $output 'telemetry.csv'))) { throw 'Missing CSV export' }
+          Get-Content (Join-Path $output 'telemetry.txt')
       - name: Verify native overview charts and capture fixture screenshots
         shell: pwsh
         run: |
