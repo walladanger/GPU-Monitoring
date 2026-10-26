@@ -55,6 +55,7 @@ public static class Program
         }
         if (args.Contains("--verify-overview")) { OverviewChecks.Run(); return; }
         if (args.Contains("--verify-monitoring")) { OverviewMonitoringChecks.Run(); return; }
+        if (args.Contains("--verify-workspace")) { WorkspaceChecks.Run(); return; }
         if (args.Contains("--self-test"))
         {
             try { SmokeChecks.Run(); }

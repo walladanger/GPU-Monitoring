@@ -10,17 +10,37 @@ namespace GpuMonitor;
 
 internal static class OverviewTheme
 {
+    public static TextBlock DialogHeading(Window window)
+    {
+        window.WindowStyle = WindowStyle.None;
+        System.Windows.Shell.WindowChrome.SetWindowChrome(window, new System.Windows.Shell.WindowChrome
+        { CaptionHeight = 0, ResizeBorderThickness = new(6), GlassFrameThickness = new(0), CornerRadius = new(0) });
+        var heading = Text(window.Title, 20); heading.Margin = new(0, 0, 0, 14);
+        heading.MouseLeftButtonDown += (_, _) => window.DragMove(); return heading;
+    }
     public static Brush Brush(string hex) => new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
-    public static readonly Brush Canvas = Brush("#10171D"), Surface = Brush("#171E27"), Border = Brush("#262E37"),
-        Muted = Brush("#A5AEB7"), Green = Brush("#33DF32"), Blue = Brush("#2B82F8");
+    public static readonly Brush Canvas = Gradient("#101A23", "#091923"), Surface = Gradient("#182630", "#10212D"), Border = Brush("#263B49"),
+        Muted = Brush("#AFBFCD"), Green = Brush("#35E544"), Blue = Brush("#229DFF");
+    public static Brush Gradient(string start, string end) => new LinearGradientBrush(
+        (Color)ColorConverter.ConvertFromString(start), (Color)ColorConverter.ConvertFromString(end), new Point(0, 0), new Point(1, 1));
     public static TextBlock Text(string text, double size = 14, Brush? color = null) => new()
-    { Text = text, FontSize = size, Foreground = color ?? Brushes.White, VerticalAlignment = VerticalAlignment.Center };
+    { Text = text, FontSize = size, Foreground = color ?? Brush("#F0F4F8"), VerticalAlignment = VerticalAlignment.Center };
     public static Border Card(UIElement child, Thickness? padding = null) => new()
-    { Child = child, Background = Surface, BorderBrush = Border, BorderThickness = new(1), CornerRadius = new(9), Padding = padding ?? new(16) };
+    { Child = child, Background = Surface, BorderBrush = Border, BorderThickness = new(1), CornerRadius = new(8), Padding = padding ?? new(16) };
     public static Button Command(string label, Action action, string? accessibleName = null)
     {
         var button = new Button { Content = label, Padding = new(12, 7, 12, 7), Margin = new(3),
             Background = Surface, Foreground = Brushes.White, BorderBrush = Border, BorderThickness = new(1), Cursor = System.Windows.Input.Cursors.Hand };
+        var border = new FrameworkElementFactory(typeof(Border));
+        border.SetValue(System.Windows.Controls.Border.CornerRadiusProperty, new CornerRadius(6));
+        border.SetValue(System.Windows.Controls.Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+        border.SetValue(System.Windows.Controls.Border.BorderBrushProperty, new TemplateBindingExtension(Control.BorderBrushProperty));
+        border.SetValue(System.Windows.Controls.Border.BorderThicknessProperty, new TemplateBindingExtension(Control.BorderThicknessProperty));
+        border.SetValue(System.Windows.Controls.Border.PaddingProperty, new TemplateBindingExtension(Control.PaddingProperty));
+        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+        presenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, new TemplateBindingExtension(Control.HorizontalContentAlignmentProperty));
+        presenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+        border.AppendChild(presenter); button.Template = new ControlTemplate(typeof(Button)) { VisualTree = border };
         button.Click += (_, _) => action();
         System.Windows.Automation.AutomationProperties.SetName(button, accessibleName ?? label);
         return button;

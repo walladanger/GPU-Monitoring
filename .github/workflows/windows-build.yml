@@ -30,6 +30,16 @@ jobs:
         run: dotnet build src/GpuMonitor/GpuMonitor.csproj -c Release
       - name: Verify SGLang and vLLM adapters over real loopback HTTP on Windows
         run: dotnet run --project tests/GpuMonitor.TelemetryChecks -c Release
+      - name: Verify native overview charts and capture fixture screenshots
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $process = Start-Process $exe -ArgumentList '--verify-overview' -PassThru
+          if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'Overview verification timed out' }
+          $result = Join-Path (Split-Path $exe) 'overview-verification/result.txt'
+          if (Test-Path $result) { Get-Content $result }
+          if ($process.ExitCode -ne 0) { throw 'Overview verification failed' }
+          if (-not (Test-Path $result)) { throw 'Overview verification produced no result' }
       - name: Verify discovery and native panel behavior
         shell: pwsh
         run: |
@@ -86,16 +96,15 @@ jobs:
           $result = Join-Path (Split-Path $exe) 'monitoring-verification.txt'
           if (Test-Path $result) { Get-Content $result }
           if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Dashboard engine verification failed' }
-      - name: Verify native overview charts and capture fixture screenshots
+      - name: Verify native workspace controls and preset recovery
         shell: pwsh
         run: |
           $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
-          $process = Start-Process $exe -ArgumentList '--verify-overview' -PassThru
-          if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'Overview verification timed out' }
-          $result = Join-Path (Split-Path $exe) 'overview-verification/result.txt'
+          $process = Start-Process $exe -ArgumentList '--verify-workspace' -PassThru
+          if (-not $process.WaitForExit(45000)) { $process.Kill(); throw 'Workspace verification timed out' }
+          $result = Join-Path (Split-Path $exe) 'overview-verification/workspace-result.txt'
           if (Test-Path $result) { Get-Content $result }
-          if ($process.ExitCode -ne 0) { throw 'Overview verification failed' }
-          if (-not (Test-Path $result)) { throw 'Overview verification produced no result' }
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Workspace verification failed' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

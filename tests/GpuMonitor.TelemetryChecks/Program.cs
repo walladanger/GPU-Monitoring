@@ -59,6 +59,8 @@ await TelemetrySessionChecks.Run(Check);
 await TelemetryEngineChecks.Run(Check);
 await DashboardTelemetryChecks.Run(Check);
 await WorkspaceLayoutChecks.Run(Check);
+WorkspacePresentationChecks.Run(Check);
+WorkspaceActionChecks.Run(Check);
 await SystemCollectorChecks.Run(Check);
 await CpuCoreChecks.Run(Check);
 await ProcessCollectorChecks.Run(Check);

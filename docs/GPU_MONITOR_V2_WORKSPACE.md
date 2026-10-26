@@ -1,6 +1,6 @@
 # Workspace presets and hardware recovery — Phase 06 foundation
 
-The version-1 workspace data contract, named JSON persistence and binding resolver are implemented. They are not automatically loaded by the dashboard, and this increment adds no visible controls, drag/resize behavior, new panels or chart types. The approved shell remains unchanged. Phase 06 is not complete.
+The version-1 workspace data contract, named JSON persistence and binding resolver are now connected to native custom-panel controls below the primary GPU cards. Presets are loaded explicitly. Existing GPU card styling is retained; the new controls and their remaining limits are described below. Phase 06 is not complete.
 
 ## Contract
 
@@ -26,4 +26,21 @@ Unit definitions come from the selected provider. Different units on one axis pr
 
 Portable checks round-trip real JSON files, preserve order/dimensions/bindings, reject invalid names/versions/duplicate identities, enforce bounded reads, preserve existing data on cancelled writes, and resolve normalized NVIDIA fixtures through UUID index changes, disappearance, stale state and reappearance. Separate tests cover missing definitions, unavailable values and incompatible-axis units.
 
-The next UI increment must connect this contract to the annotated Add Panel/metric picker and panel workspace, then implement reorder/resize/merge and keyboard alternatives with native screenshot review. It must retain missing selections as clearly unavailable and keep one primary GPU card per actual device. Do not mark tasks 06.01–06.08 or layout visual acceptance complete from this backend foundation.
+The native controls below now connect this contract to the annotated Add Panel/metric picker and custom workspace, including menu/keyboard sizing and ordering. Mouse drag/resize grips and merge/split are implemented in the subsequent interaction increment; full target-machine interaction/visual acceptance remains open. Missing selections must remain clearly unavailable; the primary GPU region keeps one card per actual device. Do not mark the entire Phase 06 complete.
+
+## Native panel controls
+
+The Overview now connects this contract to a Custom panels region directly below the detected-GPU cards. The existing GPU cards, palette, navigation and comparison sources remain intact; the new region adds the annotated workspace controls and can increase scroll height.
+
+- **Add panel:** opens a themed native sensor picker. Search by group, device, title, source or metric ID. Only real per-device advertised capabilities from enabled sources are offered. Unavailable sensors are labeled N/A; selection survives search filtering. Choose up to 16 sensors with the same unit and a line or area chart.
+- **Panel options (⋮ or right-click header):** edit sensors/rename, move earlier/later, set width (1–4 slots), set height (1–8 rows), or remove. Width clamps to the current viewport without changing the saved preference. Keyboard alternatives are Ctrl+E, Alt+Up/Down and Ctrl+Delete when the panel is focused; the options button and menus are also keyboard accessible.
+- **Presets:** save a named layout, load a saved layout, undo the last panel change, or clear custom panels. Saves use the existing bounded atomic JSON store under `%LOCALAPPDATA%\GpuMonitor\workspaces`. Presets are loaded explicitly; normal startup does not silently apply one. An invalid load leaves the current layout intact.
+- **Charts:** show actual selected source histories, retain gaps/stale state, synchronize their inspection cursor with GPU plots and use the global 1/5/15/30-minute range. Right-click the chart for raw CSV/JSON export. Byte and MiB displays use GiB while exported samples retain their original units and values.
+
+The default source set remains NVIDIA-only. Other hardware/runtime metrics become selectable when their providers are explicitly enabled with the existing `--sources` configuration. This increment does not add a source-configuration UI or make a runtime compulsory. It does not collect additional data just because a preset refers to an absent source.
+
+Missing source/device/metric bindings remain in both the editor and saved layout. Reappearing UUIDs resolve again. Incompatible same-axis units are rejected by the picker or displayed as an explicit panel error on import. Version-1 secondary-axis selections are retained but show an unsupported-renderer message; this first UI increment does not silently plot incompatible units together or rewrite such selections.
+
+The subsequent [panel interaction increment](GPU_MONITOR_V2_PANEL_INTERACTIONS.md) adds title dragging, snapped resize grips, merge/split and duplication while retaining these menu/keyboard controls. Chart pan/zoom, additional chart families and secondary-axis rendering remain later increments; target-machine interaction and visual acceptance are still open.
+
+`--verify-workspace` runs the actual Add Panel modal, search, checkbox and Apply flow in WPF, then exercises chart projection, editing/order/sizing, undo, named save/load, malformed-file preservation and missing/reappearing GPU bindings. It captures `overview-verification/workspace-controls-1536.png` and validates actual colored native chart traces and selected raw sample counts. Data is explicitly synthetic. Existing 0/1/2/4/8-GPU and narrow-view checks still run. These checks are not physical dual-3090 validation or human visual signoff.
