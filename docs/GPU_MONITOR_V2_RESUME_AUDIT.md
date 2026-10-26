@@ -69,8 +69,10 @@ Portable checks now total 160; the updated Release cross-build must also pass. W
 
 Next increments:
 
-1. Add mouse drag handles/resize grips and merge/split, retaining the menu/keyboard alternatives and missing bindings.
+1. Complete target-machine acceptance of the [panel interaction increment](GPU_MONITOR_V2_PANEL_INTERACTIONS.md): title dragging, snapped resize grips and merge/split/duplicate are implemented on top of PR #30, with menu/keyboard alternatives and stable bindings retained.
 2. Implement correctly labeled secondary axes and complete visual comparison/signoff for the new workspace states.
 3. Complete advanced chart families, persistent history and tray hover under their existing phase IDs.
 
 No release milestone is declared complete by this audit. The PRs are stacked and remain unmerged; physical dual-3090 validation and visual signoff remain open.
+
+The panel interaction branch keeps the PR #30 reference-render corrections as its base; it does not return to the earlier Overview composition. Portable checks and native CI evidence are recorded on the interaction PR. No GUI fidelity, hardware or release milestone is marked complete from code/fixture tests alone.

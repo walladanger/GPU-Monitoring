@@ -6,7 +6,7 @@ using System.Windows.Media;
 
 namespace GpuMonitor;
 
-internal sealed class MonitoringWorkspace : StackPanel
+internal sealed partial class MonitoringWorkspace : StackPanel
 {
     private readonly Func<IReadOnlyList<ProviderSnapshot>> sources;
     private readonly WorkspacePresetStore store;
@@ -19,12 +19,15 @@ internal sealed class MonitoringWorkspace : StackPanel
     public int PanelCount => Layout.Panels.Count;
     public IEnumerable<TelemetryPlot> Plots => cards.Values.Select(c => c.Plot).OfType<TelemetryPlot>();
     public event Action<DateTimeOffset?>? CursorMoved;
+    public event Action? LayoutChanged;
     internal System.Windows.Controls.Button AddButton { get; }
     internal System.Windows.Controls.Button PresetsButton { get; }
+    internal Func<Point> PointerPosition { get; set; }
 
     public MonitoringWorkspace(Func<IReadOnlyList<ProviderSnapshot>> sources, string? presetDirectory = null)
     {
         this.sources = sources;
+        PointerPosition = () => Mouse.GetPosition(panels);
         store = new(presetDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GpuMonitor", "workspaces"));
         var heading = new DockPanel { Margin = new(0, 0, 14, 12) };
         var actions = new StackPanel { Orientation = Orientation.Horizontal };
@@ -71,10 +74,11 @@ internal sealed class MonitoringWorkspace : StackPanel
                 { Edit(panel); e.Handled = true; }
             };
             cards[panel.Id] = card; panels.Children.Add(card);
+            WireGestures(card);
             card.ContextMenu = PanelMenu(panel.Id);
         }
         AddButton.IsEnabled = layout.Panels.Count < 64;
-        Refresh(sources(), time, minutes); Reflow();
+        Refresh(sources(), time, minutes); Reflow(); LayoutChanged?.Invoke();
     }
 
     internal void Remove(string id) => ApplyLayout(Layout with { Panels = Layout.Panels.Where(p => p.Id != id).ToArray() });
@@ -107,6 +111,24 @@ internal sealed class MonitoringWorkspace : StackPanel
         foreach (int value in Enumerable.Range(1, 4)) width.Items.Add(OverviewTheme.MenuCommand($"{value} slot(s)", () => PutPanel(panel with { WidthSlots = value })));
         foreach (int value in Enumerable.Range(1, 8)) height.Items.Add(OverviewTheme.MenuCommand($"{value} row(s)", () => PutPanel(panel with { HeightRows = value })));
         menu.Items.Add(width); menu.Items.Add(height);
+        var duplicate = OverviewTheme.MenuCommand("Duplicate panel", () => Change(() => WorkspaceActions.Duplicate(Layout, id)));
+        duplicate.IsEnabled = Layout.Panels.Count < 64; menu.Items.Add(duplicate);
+        var merge = new MenuItem { Header = "Merge into…", IsEnabled = Layout.Panels.Count > 1 };
+        merge.SubmenuOpened += (_, _) =>
+        {
+            merge.Items.Clear(); var snapshots = sources();
+            foreach (var target in Layout.Panels.Where(p => p.Id != id))
+            {
+                var item = OverviewTheme.MenuCommand(target.Title, () => Change(() => WorkspaceActions.Merge(Layout, id, target.Id, sources())));
+                try { WorkspaceActions.Merge(Layout, id, target.Id, snapshots); item.ToolTip = target.Id; }
+                catch (Exception error) when (error is ArgumentException or FormatException) { item.IsEnabled = false; item.ToolTip = error.Message; }
+                merge.Items.Add(item);
+            }
+        };
+        menu.Items.Add(merge);
+        var split = OverviewTheme.MenuCommand("Split into one panel per sensor", () => Change(() => WorkspaceActions.Split(Layout, id)));
+        split.IsEnabled = panel.Series.Count > 1 && panel.Series.All(s => s.Axis == 0) && Layout.Panels.Count + panel.Series.Count - 1 <= 64;
+        menu.Items.Add(split);
         menu.Items.Add(OverviewTheme.MenuCommand("Remove panel   Ctrl+Delete", () => Remove(id)));
         return menu;
     }
@@ -121,7 +143,7 @@ internal sealed class MonitoringWorkspace : StackPanel
     {
         double width = panels.ActualWidth; if (width <= 0) return;
         int columns = Math.Max(1, (int)Math.Floor(width / 500));
-        foreach (var card in cards.Values) card.Width = Math.Max(260, width / columns * Math.Min(columns, card.Specification.WidthSlots) - 14);
+        foreach (var card in cards.Values) card.Width = Math.Max(260, width / columns * Math.Min(columns, card.LayoutWidthSlots) - 14);
     }
 
     private void OpenPresets()
