@@ -4,7 +4,10 @@ namespace GpuMonitor;
 
 public sealed record ProviderSnapshot(string Source, ProviderHealth Health, string? Error,
     DateTimeOffset? LastSuccess, TelemetryBatch? Current, IReadOnlyList<TelemetrySample> History,
-    IReadOnlyList<MetricDefinition> Definitions);
+    IReadOnlyList<MetricDefinition> Definitions)
+{
+    public IReadOnlyList<TelemetryEvent> EventHistory { get; init; } = Array.Empty<TelemetryEvent>();
+}
 
 /// <summary>Dashboard-independent polling. Each source has its own loop, lock and failure state.</summary>
 public sealed class TelemetryEngine
@@ -66,7 +69,7 @@ public sealed class TelemetryEngine
                 session.Prune(DateTimeOffset.UtcNow);
                 var current = session.Current;
                 result.Add(new(pair.Key, session.Health, session.Error, session.LastSuccess, current,
-                    session.HistorySnapshot(), Array.AsReadOnly(session.Definitions.ToArray())));
+                    session.HistorySnapshot(), Array.AsReadOnly(session.Definitions.ToArray())) { EventHistory = session.EventSnapshot() });
             }
         }
         return new ReadOnlyCollection<ProviderSnapshot>(result);

@@ -44,7 +44,8 @@ public static class Program
                 }
                 Environment.ExitCode = HeadlessCollector.RunAsync(Value("--collect"),
                     int.Parse(Value("--duration", "30"), System.Globalization.CultureInfo.InvariantCulture),
-                    int.Parse(Value("--interval", "2"), System.Globalization.CultureInfo.InvariantCulture)).GetAwaiter().GetResult();
+                    int.Parse(Value("--interval", "2"), System.Globalization.CultureInfo.InvariantCulture),
+                    configuration: args.Contains("--sources") ? CollectorConfiguration.Load(Value("--sources")) : null).GetAwaiter().GetResult();
             }
             catch (Exception error)
             {
