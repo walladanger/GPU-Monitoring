@@ -1,0 +1,18 @@
+{
+  "Version": 1,
+  "CollectProcesses": true,
+  "Runtimes": [
+    {
+      "Enabled": true,
+      "Id": "sglang-local",
+      "Kind": "sglang",
+      "Endpoint": "http://127.0.0.1:30000/metrics"
+    },
+    {
+      "Enabled": true,
+      "Id": "vllm-local",
+      "Kind": "vllm",
+      "Endpoint": "http://127.0.0.1:8000/metrics"
+    }
+  ]
+}

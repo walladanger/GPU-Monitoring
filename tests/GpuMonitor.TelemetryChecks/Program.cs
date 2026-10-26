@@ -56,4 +56,12 @@ Check(active.Current.Count == 0 && active.History.Count == 0, "Successful zero-d
 TelemetryContractChecks.Run(Check);
 PlotDataChecks.Run(Check);
 await TelemetrySessionChecks.Run(Check);
+await TelemetryEngineChecks.Run(Check);
+await SystemCollectorChecks.Run(Check);
+await ProcessCollectorChecks.Run(Check);
+await RuntimeMetricsChecks.Run(Check);
+await RuntimeTransportChecks.Run(Check);
+await MetadataFeedChecks.Run(Check);
+OtlpChecks.Run(Check);
+await CollectorConfigurationChecks.Run(Check);
 Console.WriteLine($"PASS: {passed} telemetry regression checks (no hardware or WPF required).");
