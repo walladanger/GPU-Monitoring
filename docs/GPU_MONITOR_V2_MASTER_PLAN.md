@@ -27,7 +27,7 @@
 4. Layout loaded on a different machine handles missing device IDs without crashing.
 5. Crosshair times and process/trace correlation use consistently mapped timestamps across sources.
 
-**Status:** Detailed scoped plan. The listed steps are not implemented merely because they appear here.
+**Status:** Detailed scoped plan. The listed steps are not implemented merely because they appear here. See [the current repository resume audit](GPU_MONITOR_V2_RESUME_AUDIT.md) for branch reconciliation, implementation evidence and remaining gates.
 
 ## Phase 00 — Baseline audit and project protection
 

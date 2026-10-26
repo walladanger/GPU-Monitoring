@@ -8,6 +8,7 @@ public sealed class CollectorConfiguration
 {
     public int Version { get; set; } = 1;
     public bool CollectProcesses { get; set; } = true;
+    public bool CollectCpuCores { get; set; }
     public List<RuntimeSourceConfiguration> Runtimes { get; set; } = [];
     public List<MetadataFeedConfiguration> Feeds { get; set; } = [];
     public static CollectorConfiguration Load(string path)
@@ -51,6 +52,7 @@ public sealed class BackendProviderSet : IDisposable
         try
         {
             result.providers.AddRange([new NvidiaCollector(), new WindowsSystemCollector(), new NetworkCollector(), new VolumeCollector(), new DiskCollector()]);
+            if (configuration.CollectCpuCores) result.providers.Add(new CpuCoreCollector());
             if (configuration.CollectProcesses) result.providers.AddRange([new ProcessCollector(), new NvidiaProcessCollector()]);
             foreach (var source in configuration.Runtimes.Where(s => s.Enabled))
             {
