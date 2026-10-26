@@ -7,6 +7,8 @@ public sealed record ProviderSnapshot(string Source, ProviderHealth Health, stri
     IReadOnlyList<MetricDefinition> Definitions)
 {
     public IReadOnlyList<TelemetryEvent> EventHistory { get; init; } = Array.Empty<TelemetryEvent>();
+    public IReadOnlyList<TelemetrySample> Series(string deviceId, string metricKey) =>
+        Array.AsReadOnly(History.Where(s => s.Device.Id == deviceId && s.MetricKey == metricKey).ToArray());
 }
 
 /// <summary>Dashboard-independent polling. Each source has its own loop, lock and failure state.</summary>
@@ -43,26 +45,41 @@ public sealed class TelemetryEngine
         do
         {
             cancellation.ThrowIfCancellationRequested();
-            try
-            {
-                // Provider I/O never holds the read lock or blocks another source's loop.
-                var batch = await source.Session.ReadAsync(cancellation);
-                cancellation.ThrowIfCancellationRequested();
-                lock (source.Gate) source.Session.Apply(batch, DateTimeOffset.UtcNow);
-            }
-            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
-            catch (Exception error)
-            {
-                lock (source.Gate) source.Session.MarkStale(error.Message, DateTimeOffset.UtcNow);
-            }
+            await CollectAsync(source, cancellation);
         } while (await timer.WaitForNextTickAsync(cancellation));
     }
 
-    public IReadOnlyList<ProviderSnapshot> Snapshot()
+    /// <summary>One concurrent read per source, only while continuous polling is stopped.</summary>
+    public async Task SampleOnceAsync(CancellationToken cancellation)
+    {
+        if (Interlocked.Exchange(ref running, 1) != 0) throw new InvalidOperationException("Collection is already running.");
+        try { await Task.WhenAll(sources.Values.Select(source => Task.Run(() => CollectAsync(source, cancellation), cancellation))); }
+        finally { Volatile.Write(ref running, 0); }
+    }
+
+    private static async Task CollectAsync(Source source, CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        try
+        {
+            // Provider I/O never holds the read lock or blocks another source's loop.
+            var batch = await source.Session.ReadAsync(cancellation);
+            cancellation.ThrowIfCancellationRequested();
+            lock (source.Gate) source.Session.Apply(batch, DateTimeOffset.UtcNow);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
+        catch (Exception error)
+        {
+            lock (source.Gate) source.Session.MarkStale(error.Message, DateTimeOffset.UtcNow);
+        }
+    }
+
+    public IReadOnlyList<ProviderSnapshot> Snapshot(string? sourceId = null)
     {
         var result = new List<ProviderSnapshot>();
         foreach (var pair in sources)
         {
+            if (sourceId != null && pair.Key != sourceId) continue;
             lock (pair.Value.Gate)
             {
                 var session = pair.Value.Session;

@@ -17,10 +17,11 @@ internal static class RuntimeTransportChecks
                 CollectProcesses = false,
                 Runtimes = [
                     new() { Enabled = true, Id = "sglang-ready", Kind = "sglang", Endpoint = server.Endpoint("sglang").ToString() },
+                    new() { Enabled = true, Id = "llamacpp-ready", Kind = "llamacpp", Endpoint = server.Endpoint("llamacpp").ToString() },
                     new() { Enabled = true, Id = "vllm-ready", Kind = "vllm", Endpoint = server.Endpoint("vllm").ToString() }
                 ]
             });
-            foreach (var kind in new[] { "sglang", "vllm" })
+            foreach (var kind in new[] { "sglang", "vllm", "llamacpp" })
             {
                 var provider = providers.Providers.Single(p => p.SourceId == "runtime:" + kind + "-ready");
                 var session = new TelemetrySession(provider);
@@ -30,11 +31,16 @@ internal static class RuntimeTransportChecks
                 await session.RefreshAsync(stop.Token);
                 var samples = session.Current!.Samples;
                 double? Value(string key) => samples.Single(s => s.MetricKey == key).Value;
-                check(Value("tokens.output.rate") == 20 && Value("tokens.prompt.rate") == 40 &&
-                    Value("requests.running") == 3 && Value("requests.waiting") == 1 && Value("cache.usage") == 25,
+                bool Near(string key, double expected) => Value(key) is double actual && Math.Abs(actual - expected) < 1e-9;
+                check(Near("tokens.output.rate", 20) && Near("tokens.prompt.rate", 40) &&
+                    Value("requests.running") == 3 && Value("requests.waiting") == 1 &&
+                    (kind == "llamacpp" || Value("cache.usage") == 25),
                     kind + " configured adapter reads actual HTTP bodies into source-specific token/queue/cache metrics");
-                check(Math.Abs(Value("latency.inter_token.mean")!.Value - 0.02) < 1e-9 &&
-                    Value("latency.ttft.mean") == 0.5 && Value("latency.decode.mean") == 0.25,
+                if (kind == "llamacpp")
+                    check(provider.Definitions.All(d => !d.Key.StartsWith("cache.") && !d.Key.StartsWith("latency.")),
+                        "llama.cpp adapter does not invent cache occupancy or latency histogram measurements");
+                else check(Math.Abs(Value("latency.inter_token.mean")!.Value - 0.02) < 1e-9 &&
+                    Near("latency.ttft.mean", 0.5) && Near("latency.decode.mean", 0.25),
                     kind + " preserves distinct TTFT, inter-token and per-request decode histogram means");
                 server.Fail = true;
                 bool failed = false;
@@ -46,13 +52,14 @@ internal static class RuntimeTransportChecks
                 check(session.Health == ProviderHealth.Live && session.Current!.Samples.Single(s => s.MetricKey == "tokens.output.rate").Value == null,
                     kind + " real HTTP reconnect resets rate baselines");
             }
-            check(server.OnlyMetricsGets, "Both adapters issue only metrics GET requests without inference or credentials");
+            check(server.OnlyMetricsGets, "All runtime adapters issue only metrics GET requests without inference or credentials");
             using var defaults = BackendProviderSet.Create(new() { Runtimes = [
                 new() { Enabled = true, Id = "sglang-default", Kind = "sglang" },
+                new() { Enabled = true, Id = "llamacpp-default", Kind = "llamacpp" },
                 new() { Enabled = true, Id = "vllm-default", Kind = "vllm" }
             ] });
-            check(defaults.Providers.Count(p => p.SourceId.StartsWith("runtime:", StringComparison.Ordinal)) == 2,
-                "Ready SGLang/vLLM presets can be constructed without hand-written metric mappings or endpoint URLs");
+            check(defaults.Providers.Count(p => p.SourceId.StartsWith("runtime:", StringComparison.Ordinal)) == 3,
+                "Ready llama.cpp/SGLang/vLLM presets can be constructed without hand-written metric mappings or endpoint URLs");
         }
         finally
         {
@@ -78,7 +85,8 @@ internal static class RuntimeTransportChecks
                 await using var stream = client.GetStream();
                 using var reader = new StreamReader(stream, Encoding.ASCII, false, 4096, leaveOpen: true);
                 string request = await reader.ReadLineAsync(cancellation) ?? "";
-                string kind = request.Contains("/sglang/metrics", StringComparison.Ordinal) ? "sglang" : "vllm";
+                string kind = request.Contains("/sglang/metrics", StringComparison.Ordinal) ? "sglang" :
+                    request.Contains("/llamacpp/metrics", StringComparison.Ordinal) ? "llamacpp" : "vllm";
                 OnlyMetricsGets &= request == $"GET /{kind}/metrics HTTP/1.1";
                 string? header;
                 while (!string.IsNullOrEmpty(header = await reader.ReadLineAsync(cancellation)))
@@ -94,6 +102,8 @@ internal static class RuntimeTransportChecks
         private string Metrics(string kind, int call)
         {
             string Row(string name, double value) => $"{kind}:{name}{{model_name=\"fixture-model\",engine=\"0\"}} {value.ToString("R", CultureInfo.InvariantCulture)} {start + call * 1000}\n";
+            if (kind == "llamacpp") return Row("tokens_predicted_total", 100 + call * 20) +
+                Row("prompt_tokens_total", 200 + call * 40) + Row("requests_processing", 3) + Row("requests_deferred", 1);
             string text = Row("generation_tokens_total", 100 + call * 20) + Row("prompt_tokens_total", 200 + call * 40) +
                 Row(kind == "sglang" ? "num_running_reqs" : "num_requests_running", 3) +
                 Row(kind == "sglang" ? "num_queue_reqs" : "num_requests_waiting", 1) +

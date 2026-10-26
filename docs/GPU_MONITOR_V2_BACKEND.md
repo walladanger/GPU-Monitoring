@@ -33,7 +33,7 @@ Task collection = engine.RunAsync(TimeSpan.FromSeconds(2), stop.Token);
 
 Each provider has its own worker loop, lock, current snapshot, error and last-success time. A failed or slow NVIDIA poll cannot stop CPU/RAM/network collection. Snapshot collections are copied/read-only and may be read across threads. The engine rejects a second simultaneous RunAsync. Providers must honor cancellation and bound their own external I/O; arbitrary third-party blocking code cannot be force-stopped safely. NVIDIA retains its existing eight-second timeout and process-tree cancellation.
 
-Key by (Source, Device.Id, MetricKey), never display index or display name. Use Definitions for units and Current.Capabilities for availability. First rate samples and reset counters are unavailable, not zero. Histories remain bounded and expire even during outages. Provider failures retain inventory and insert gaps. Successful removal drops only removed-device histories. The existing GUI keeps its existing single-provider polling path until the replacement GUI explicitly adopts the engine.
+Key by (Source, Device.Id, MetricKey), never display index or display name. Use Definitions for units and Current.Capabilities for availability. First rate samples and reset counters are unavailable, not zero. Histories remain bounded and expire even during outages. Provider failures retain inventory and insert gaps. Successful removal drops only removed-device histories. The Overview dashboard now renders independent engine snapshots. Normal launch retains NVIDIA-only collection; an explicit --sources configuration opts into the other backend sources. The legacy dashboard retains its earlier polling path.
 
 ## Implemented sources
 
@@ -70,3 +70,19 @@ Each logical CPU series retains at most 900 samples and 30 minutes, whichever is
 Regression checks cover group identity, aggregates, invalid percentages, missing data, removal, configuration, cancellation and disposal. Windows CI also reads real counters after warmup and checks headless exports. Portable fixture tests and Linux cross-compilation alone do not prove Windows PDH runtime behavior.
 
 Official API contracts: [formatted wildcard arrays](https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhgetformattedcounterarrayw), [English counter paths](https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhaddenglishcounterw), and [performance counter collection](https://learn.microsoft.com/en-us/windows/win32/perfctrs/collecting-performance-data).
+
+## Dashboard engine lifecycle
+
+The Overview now uses `DashboardTelemetry` to own `TelemetryEngine` and provider lifetime. WPF timers render immutable snapshots; they do not execute provider reads. Source-specific snapshots avoid copying process/runtime history into a GPU-only render. GPU cards, values, comparison series and exports consume the engine's actual NVIDIA history, including outage gaps.
+
+Normal launch preserves the previous NVIDIA-only source selection. To opt into the broader backend set, pass an explicit local configuration, for example:
+
+```powershell
+Start-Process .\GpuMonitor.exe -ArgumentList '--sources ".\config\llamacpp.sources.json"'
+```
+
+This enables the preset's runtime and the configured backend's hardware/process providers, while retaining the existing GPU dashboard layout. Additional hardware/runtime panels and a source-management GUI remain planned; these sources do not magically become extra GPU cards. Existing per-chart CSV/JSON export still exports the visible GPU data. Use headless collection for the complete multi-source export. `--legacy-ui` does not accept configured sources.
+
+Pause cancels and drains polling while retaining histories. A paused rescan takes one concurrent read per source, then remains paused. A rescan while running drains/restarts collection around that one-shot read. Changing the refresh interval serializes the transition without overlapping provider reads. Closing awaits cancellation before provider resources and the tray are disposed; the second close is dispatched after the first Closing handler returns. Providers retain their existing I/O timeouts, independent health and privacy defaults.
+
+`--verify-monitoring` starts the real WPF window with synthetic GPU data and a deliberately failed companion provider, verifies population, pause/rescan/resume and awaited disposal, and writes `monitoring-verification.txt`. The existing deterministic 0/1/2/4/8 screenshot checks remain unchanged. Neither fixture gate proves target-machine hardware operation or visual signoff.

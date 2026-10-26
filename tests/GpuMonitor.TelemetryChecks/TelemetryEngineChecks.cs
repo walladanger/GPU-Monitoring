@@ -21,6 +21,11 @@ internal static class TelemetryEngineChecks
         try { await engine.RunAsync(TimeSpan.FromSeconds(1), stop.Token); }
         catch (InvalidOperationException) { overlap = true; }
         check(overlap, "Concurrent engine start is rejected");
+        overlap = false;
+        try { await engine.SampleOnceAsync(stop.Token); } catch (InvalidOperationException) { overlap = true; }
+        check(overlap, "One-shot refresh cannot overlap a running engine");
+        check(engine.Snapshot("healthy").Count == 1 && engine.Snapshot("missing").Count == 0,
+            "Source-specific dashboard snapshots exclude unrelated histories and nonexistent sources");
         stop.Cancel();
         try { await running; } catch (OperationCanceledException) { }
         check(engine.Snapshot().Single(s => s.Source == "healthy").Health == ProviderHealth.Live,
@@ -36,6 +41,10 @@ internal static class TelemetryEngineChecks
             snapshot.Single(s => s.Source == "healthy").Health == ProviderHealth.Live,
             "Provider failures remain isolated from healthy collection");
         end.Cancel(); try { await loop; } catch (OperationCanceledException) { }
+        await isolated.SampleOnceAsync(CancellationToken.None);
+        check(isolated.Snapshot("failed").Single().Health == ProviderHealth.Stale &&
+            isolated.Snapshot("healthy").Single().Health == ProviderHealth.Live,
+            "One-shot refresh isolates a failed source from successful source snapshots");
     }
 
     private sealed class Provider(string id, Func<CancellationToken, Task> read) : ITelemetryProvider

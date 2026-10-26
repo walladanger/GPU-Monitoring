@@ -6,6 +6,13 @@ namespace GpuMonitor;
 /// <summary>The same measured window is used for rendering, inspection and export.</summary>
 public static class PlotData
 {
+    /// <summary>Maps pointer fraction using the explicit view window, even before native chart initialization.</summary>
+    public static DateTimeOffset? CursorTime(double fraction, DateTimeOffset start, DateTimeOffset end)
+    {
+        if (!double.IsFinite(fraction) || fraction < 0 || fraction > 1 || end <= start) return null;
+        return start.AddTicks((long)((end - start).Ticks * fraction));
+    }
+
     public static IReadOnlyList<TelemetrySample> Window(IReadOnlyList<TelemetrySample> samples,
         DateTimeOffset now, int minutes)
     {

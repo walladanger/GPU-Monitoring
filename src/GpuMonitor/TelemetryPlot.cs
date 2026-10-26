@@ -59,8 +59,11 @@ public sealed class TelemetryPlot : Grid
             var p = e.GetPosition(chart);
             if (p.X < 52 || p.X > ActualWidth - 14 || p.Y < 12 || p.Y > ActualHeight - 30 ||
                 timeAxis.MinLimit == null || timeAxis.MaxLimit == null) { CursorMoved?.Invoke(null); return; }
-            var coordinate = chart.ScalePixelsToData(new LiveChartsCore.Drawing.LvcPointD(p.X, p.Y));
-            if (double.IsFinite(coordinate.X)) CursorMoved?.Invoke(DateTimeOffset.FromUnixTimeMilliseconds((long)coordinate.X));
+            // The draw margin and explicit limits are already known before LiveCharts
+            // initializes its internal scaler (mouse input can arrive during first render).
+            CursorMoved?.Invoke(PlotData.CursorTime((p.X - 52) / (ActualWidth - 66),
+                DateTimeOffset.FromUnixTimeMilliseconds((long)timeAxis.MinLimit.Value),
+                DateTimeOffset.FromUnixTimeMilliseconds((long)timeAxis.MaxLimit.Value)));
         };
         chart.MouseLeave += (_, _) => CursorMoved?.Invoke(null);
     }
