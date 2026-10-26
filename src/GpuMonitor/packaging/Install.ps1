@@ -2,10 +2,17 @@ $ErrorActionPreference = 'Stop'
 $target = Join-Path $env:LOCALAPPDATA 'Programs\GpuMonitor'
 $source = $PSScriptRoot
 if (-not (Test-Path -LiteralPath (Join-Path $source 'GpuMonitor.exe'))) { throw 'Extract the complete app ZIP before installing.' }
+foreach ($required in @('config', 'licenses')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $source $required) -PathType Container)) { throw "Extract the complete app ZIP before installing: the '$required' folder is missing." }
+}
 if (Get-Process GpuMonitor -ErrorAction SilentlyContinue) { throw 'Close GPU Monitor (including its tray icon) before installing or updating.' }
 New-Item -ItemType Directory -Path $target -Force | Out-Null
 Get-ChildItem -LiteralPath $source -File | Where-Object { $_.Name -ne 'Install.cmd' -and $_.Name -ne 'Install.ps1' } | Copy-Item -Destination $target -Force
-if (Test-Path -LiteralPath (Join-Path $source 'runtime')) { Copy-Item -LiteralPath (Join-Path $source 'runtime') -Destination $target -Recurse -Force }
+# config = optional runtime/adapter presets, licenses = third-party notices, runtime = bundled .NET (only in runtime-bundled packages).
+foreach ($folder in @('runtime', 'config', 'licenses')) {
+    $folderSource = Join-Path $source $folder
+    if (Test-Path -LiteralPath $folderSource -PathType Container) { Copy-Item -LiteralPath $folderSource -Destination $target -Recurse -Force }
+}
 $shell = New-Object -ComObject WScript.Shell
 $link = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'GPU Monitor.lnk'))
 $link.TargetPath = Join-Path $target 'GpuMonitor.exe'

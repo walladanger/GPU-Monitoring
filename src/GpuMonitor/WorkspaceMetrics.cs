@@ -7,7 +7,14 @@ public sealed record WorkspaceMetricChoice(WorkspaceSeries Selection, string Gro
 }
 public sealed record WorkspaceChartSeries(WorkspaceSeries Selection, string Name, WorkspaceBindingState State,
     IReadOnlyList<TelemetrySample> Samples);
-public sealed record WorkspaceChartData(string Unit, string? Error, IReadOnlyList<WorkspaceChartSeries> Series);
+public sealed record WorkspaceAxis(int Index, string RawUnit)
+{
+    public string DisplayUnit => RawUnit is "B" or "MiB" ? " GiB" : RawUnit == "%" ? "%" : " " + RawUnit;
+    public double Divisor => RawUnit == "B" ? 1073741824 : RawUnit == "MiB" ? 1024 : 1;
+    public double? Maximum => RawUnit == "%" ? 100 : null;
+}
+public sealed record WorkspaceChartData(string Unit, string? Error, IReadOnlyList<WorkspaceChartSeries> Series,
+    IReadOnlyList<WorkspaceAxis> Axes);
 
 /// <summary>Presentation data comes from advertised per-device capabilities, never a synthetic sensor list.</summary>
 public static class WorkspaceMetrics
@@ -53,10 +60,35 @@ public static class WorkspaceMetrics
                 ? source?.Series(binding.Selection.DeviceId, binding.Selection.MetricKey) ?? [] : [];
             return new WorkspaceChartSeries(binding.Selection, label, binding.State, history);
         }).ToArray();
-        return new(resolved.Series.FirstOrDefault(s => s.Unit != null)?.Unit ?? "", resolved.AxisError ??
-            (panel.Series.Any(s => s.Axis != 0) ? "Secondary-axis rendering is not available in this build. Saved selections are retained." : null),
-            Array.AsReadOnly(series));
+        var axes = resolved.Series.GroupBy(s => s.Selection.Axis).OrderBy(g => g.Key)
+            .Select(g => new WorkspaceAxis(g.Key, g.FirstOrDefault(s => s.Unit != null)?.Unit ?? "")).ToArray();
+        return new(axes.FirstOrDefault(a => a.Index == 0)?.RawUnit ?? "", resolved.AxisError,
+            Array.AsReadOnly(series), Array.AsReadOnly(axes));
     }
+
+    /// <summary>Assigns new unit groups to free axes while preserving saved selections' axis choices.</summary>
+    public static IReadOnlyList<WorkspaceSeries> AssignAxes(IReadOnlyList<WorkspaceMetricChoice> choices,
+        IReadOnlyList<WorkspaceSeries> existing)
+    {
+        var units = new Dictionary<int, string>();
+        var result = new List<WorkspaceSeries>();
+        foreach (var choice in choices.OrderByDescending(c => existing.Any(s => Same(s, c.Selection))))
+        {
+            var saved = existing.FirstOrDefault(s => Same(s, choice.Selection));
+            int axis;
+            if (saved != null) axis = saved.Axis;
+            else if (units.Any(p => p.Value == choice.Unit)) axis = units.First(p => p.Value == choice.Unit).Key;
+            else if (!units.ContainsKey(0)) axis = 0;
+            else if (!units.ContainsKey(1)) axis = 1;
+            else throw new FormatException("At most two different units can share a panel. Use a separate panel for another unit.");
+            if (units.TryGetValue(axis, out var unit) && unit.Length > 0 && choice.Unit.Length > 0 && unit != choice.Unit)
+                throw new FormatException("Saved sensors have incompatible units on the same axis. Remove a conflicting sensor first.");
+            if (!units.ContainsKey(axis) || choice.Unit.Length > 0) units[axis] = choice.Unit;
+            result.Add(choice.Selection with { Axis = axis });
+        }
+        return choices.Select(c => result.Single(s => Same(s, c.Selection))).ToArray();
+    }
+    private static bool Same(WorkspaceSeries a, WorkspaceSeries b) => a.Source == b.Source && a.DeviceId == b.DeviceId && a.MetricKey == b.MetricKey;
 
     public static string StateLabel(WorkspaceBindingState state) => state switch
     {

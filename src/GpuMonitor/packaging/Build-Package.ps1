@@ -15,7 +15,7 @@ if ($UseInstalledRuntime) {
     dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $publish
     if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
 }
-Copy-Item -Path (Join-Path $PSScriptRoot 'Install.*'),(Join-Path $PSScriptRoot 'Uninstall.ps1') -Destination $publish
+Copy-Item -Path (Join-Path $PSScriptRoot 'Install.*'),(Join-Path $PSScriptRoot 'Uninstall.ps1'),(Join-Path $PSScriptRoot 'Validate-GpuMonitor.ps1'),(Join-Path $PSScriptRoot 'Validate-GpuMonitor.vbs') -Destination $publish
 Copy-Item -LiteralPath (Join-Path (Split-Path $PSScriptRoot) 'README.md') -Destination $publish
 $packageFiles = Get-ChildItem -LiteralPath $publish | Where-Object { $_.Name -notin @('GpuMonitor.pdb','self-test-result.txt','ui-check-result.txt','dashboard-preview.png') }
 Compress-Archive -LiteralPath $packageFiles.FullName -DestinationPath (Join-Path (Split-Path $PSScriptRoot) 'GPU-Monitor-Windows-x64.zip') -Force

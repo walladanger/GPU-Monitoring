@@ -87,6 +87,25 @@ jobs:
           if (-not (Test-Path (Join-Path $output 'events.csv'))) { throw 'Missing event/measurement CSV export' }
           if (-not (Test-Path (Join-Path $output 'telemetry.csv'))) { throw 'Missing CSV export' }
           Get-Content (Join-Path $output 'telemetry.txt')
+      - name: Verify target acceptance validation logic
+        shell: pwsh
+        run: |
+          ./tests/acceptance/TargetAcceptanceChecks.ps1
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tests/acceptance/TargetAcceptanceChecks.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5 acceptance checks failed' }
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $compiler)) { throw 'Inno Setup is missing from the Windows runner' }
+          & $compiler src/GpuMonitor/packaging/GpuMonitor.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+      - name: Verify packaged acceptance runner on GPU-free Windows CI
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/publish/GpuMonitor.exe
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./src/GpuMonitor/publish/Validate-GpuMonitor.ps1 -Executable $exe -ExpectedGpuCount 0 -DurationSeconds 6 -OutputRoot (Join-Path $env:RUNNER_TEMP 'GPU validation with spaces')
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged acceptance runner failed' }
       - name: Verify actual dashboard engine lifecycle
         shell: pwsh
         run: |
@@ -105,19 +124,36 @@ jobs:
           $result = Join-Path (Split-Path $exe) 'overview-verification/workspace-result.txt'
           if (Test-Path $result) { Get-Content $result }
           if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Workspace verification failed' }
+      - name: Verify independent chart axes, time navigation and raw exports
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $process = Start-Process $exe -ArgumentList '--verify-charts' -PassThru
+          if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Chart interaction verification timed out' }
+          $result = Join-Path (Split-Path $exe) 'overview-verification/charts-result.txt'
+          if (Test-Path $result) { Get-Content $result }
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Chart interaction verification failed' }
+      - name: Verify persistent SQLite history and native saved-history browser
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $process = Start-Process $exe -ArgumentList '--verify-persistence' -PassThru
+          if (-not $process.WaitForExit(45000)) { $process.Kill(); throw 'Persistence verification timed out' }
+          $result = Join-Path (Split-Path $exe) 'overview-verification/persistence-result.txt'
+          if (Test-Path $result) { Get-Content $result }
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Persistence verification failed' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: GPU-Monitor-Overview-Verification
           path: src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/overview-verification/
           if-no-files-found: warn
-      - name: Compile installer
-        shell: pwsh
-        run: |
-          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
-          if (-not (Test-Path $compiler)) { throw 'Inno Setup is missing from the Windows runner' }
-          & $compiler src/GpuMonitor/packaging/GpuMonitor.iss
-          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: GPU-Monitor-Target-Validation-CI
+          path: ${{ runner.temp }}/GPU validation with spaces/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: GPU-Monitor-Windows-x64

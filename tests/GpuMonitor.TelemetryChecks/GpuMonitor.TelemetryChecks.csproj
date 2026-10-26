@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="[10.0.13]" />
+    <Compile Include="../../src/GpuMonitor/Settings.cs" Link="Settings.cs" />
+    <Compile Include="../../src/GpuMonitor/HistoryRecorder.cs" Link="HistoryRecorder.cs" />
+    <Compile Include="../../src/GpuMonitor/HistoryStore.cs" Link="HistoryStore.cs" />
     <Compile Include="../../src/GpuMonitor/WorkspaceActions.cs" Link="WorkspaceActions.cs" />
     <Compile Include="../../src/GpuMonitor/WorkspaceMetrics.cs" Link="WorkspaceMetrics.cs" />
     <Compile Include="../../src/GpuMonitor/WorkspaceLayout.cs" Link="WorkspaceLayout.cs" />
@@ -23,6 +27,7 @@
     <Compile Include="../../src/GpuMonitor/SystemCollectors.cs" Link="SystemCollectors.cs" />
     <Compile Include="../../src/GpuMonitor/HeadlessCollector.cs" Link="HeadlessCollector.cs" />
     <Compile Include="../../src/GpuMonitor/TelemetryEngine.cs" Link="TelemetryEngine.cs" />
+    <Compile Include="../../src/GpuMonitor/PlotRange.cs" Link="PlotRange.cs" />
     <Compile Include="../../src/GpuMonitor/PlotData.cs" Link="PlotData.cs" />
     <!-- Compile the production collector/parser directly; no GPU or WPF required. -->
     <Compile Include="../../src/GpuMonitor/Telemetry.cs" Link="Telemetry.cs" />

@@ -43,7 +43,12 @@ internal static class WorkspaceActionChecks
         invalid = false;
         try { WorkspaceActions.Merge(mixed, "a", "b", [sources[0] with { Definitions = [definition, new("nvidia-smi", "power.draw", "Power", "W")] }]); }
         catch (FormatException) { invalid = true; }
-        check(invalid, "Merge refuses incompatible units rather than silently overlaying them");
+        var dualMerged = WorkspaceActions.Merge(mixed, "a", "b", [sources[0] with { Definitions = [definition, new("nvidia-smi", "power.draw", "Power", "W")] }]);
+        check(!invalid && dualMerged.Panels.Single().Series.Single(s => s.MetricKey == "power.draw").Axis == 0 &&
+            dualMerged.Panels.Single().Series.Single(s => s.MetricKey == "utilization.gpu").Axis == 1,
+            "Merge assigns distinct axes to different known units while retaining the target axis");
+        check(WorkspaceActions.Split(dualMerged, "b").Panels.All(p => p.Series.Single().Axis == 0),
+            "Splitting a two-axis comparison normalizes each single-sensor panel to its own primary axis");
         var split = WorkspaceActions.Split(merged, "b");
         check(split.Panels.Count == 3 && split.Panels[0].Id == "b" && split.Panels.Take(2).All(p => p.Series.Count == 1) &&
             split.Panels.Take(2).SelectMany(p => p.Series).SequenceEqual(target.Series),

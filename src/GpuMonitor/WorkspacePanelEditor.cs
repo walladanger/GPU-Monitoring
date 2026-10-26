@@ -76,19 +76,18 @@ internal sealed class WorkspacePanelEditor : Window
         if (choices.Children.Count == 0) choices.Children.Add(OverviewTheme.Text("No matching sensors from the enabled sources.", 13, OverviewTheme.Muted));
         Count();
     }
-    private void Count() => status.Text = $"{selected.Count} selected · up to 16 sensors with the same unit";
+    private void Count() => status.Text = $"{selected.Count} selected · up to 16 sensors · two units on labeled left/right axes";
     private bool TryApply()
     {
-        var series = catalog.Where(c => selected.Contains(c.Selection)).Select(c => c.Selection).ToArray();
+        var selectedChoices = catalog.Where(c => selected.Contains(c.Selection)).ToArray();
+        var series = selectedChoices.Select(c => c.Selection).ToArray();
         var candidate = original with { Title = title.Text.Trim(), Chart = area.IsChecked == true ? "area" : "line", Series = series };
         try
         {
             if (series.Length is < 1 or > 16) throw new FormatException("Select between 1 and 16 sensors.");
             if (candidate.Title.Length == 0) throw new FormatException("Enter a panel title.");
             WorkspacePresetStore.Validate(new(1, "Editor", [candidate]));
-            if (series.Any(s => s.Axis != 0)) throw new FormatException("Secondary-axis presets are retained, but cannot be edited in this build.");
-            if (catalog.Where(c => selected.Contains(c.Selection) && c.Unit.Length > 0).Select(c => c.Unit).Distinct(StringComparer.Ordinal).Count() > 1)
-                throw new FormatException("Choose sensors with the same unit. Separate axes will be available in a later increment.");
+            candidate = candidate with { Series = WorkspaceMetrics.AssignAxes(selectedChoices, original.Series) };
             Result = candidate; return true;
         }
         catch (FormatException error) { status.Text = error.Message; return false; }

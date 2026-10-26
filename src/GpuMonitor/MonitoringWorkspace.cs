@@ -62,7 +62,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         {
             var card = new WorkspaceChartCard(panel, () => OpenPanelMenu(panel.Id)) { Focusable = true };
             card.CursorMoved += value => CursorMoved?.Invoke(value);
-            card.MouseLeftButtonDown += (_, _) => card.Focus();
+            card.MouseLeftButtonDown += (_, _) => { if (!card.IsKeyboardFocusWithin) card.Focus(); };
             card.PreviewKeyDown += (_, e) =>
             {
                 var key = e.Key == Key.System ? e.SystemKey : e.Key;
@@ -127,7 +127,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         };
         menu.Items.Add(merge);
         var split = OverviewTheme.MenuCommand("Split into one panel per sensor", () => Change(() => WorkspaceActions.Split(Layout, id)));
-        split.IsEnabled = panel.Series.Count > 1 && panel.Series.All(s => s.Axis == 0) && Layout.Panels.Count + panel.Series.Count - 1 <= 64;
+        split.IsEnabled = panel.Series.Count > 1 && Layout.Panels.Count + panel.Series.Count - 1 <= 64;
         menu.Items.Add(split);
         menu.Items.Add(OverviewTheme.MenuCommand("Remove panel   Ctrl+Delete", () => Remove(id)));
         return menu;
