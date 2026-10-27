@@ -22,16 +22,18 @@ internal sealed class WorkspaceChartCard : Border
     internal int LayoutWidthSlots => previewSize?.WidthSlots ?? Specification.WidthSlots;
     public event Action<DateTimeOffset?>? CursorMoved;
 
-    public WorkspaceChartCard(WorkspacePanel panel, Action openOptions, Action openSelection, Action openWindow)
+    public WorkspaceChartCard(WorkspacePanel panel, Action openOptions, Action? openSelection = null, Action? openWindow = null)
     {
         Specification = panel;
         Background = OverviewTheme.Surface; BorderBrush = OverviewTheme.Border; BorderThickness = new(1);
         CornerRadius = new(9); Padding = new(16); Margin = new(0, 0, 14, 14); Child = content;
         var heading = new DockPanel { Margin = new(0, 0, 0, 10) };
         var actions = new StackPanel { Orientation = Orientation.Horizontal };
-        var open = OverviewTheme.Command("↗", openWindow, "Open " + panel.Title + " in new window");
+        var open = OverviewTheme.Command("↗", openWindow ?? (() => { }), "Open " + panel.Title + " in new window");
+        open.IsEnabled = openWindow != null;
         open.ToolTip = "Open in new window"; open.Padding = new(8, 4, 8, 4); actions.Children.Add(open);
-        var select = OverviewTheme.Command("Select", openSelection, "Select graph and sensors for " + panel.Title);
+        var select = OverviewTheme.Command("Select", openSelection ?? (() => { }), "Select graph and sensors for " + panel.Title);
+        select.IsEnabled = openSelection != null;
         select.ToolTip = "Choose graph type and sensors"; select.Padding = new(8, 4, 8, 4); actions.Children.Add(select);
         var options = OverviewTheme.Command("⋮", openOptions, "Options for " + panel.Title);
         actions.Children.Add(options); DockPanel.SetDock(actions, Dock.Right); heading.Children.Add(actions);
