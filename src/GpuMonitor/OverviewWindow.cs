@@ -80,7 +80,8 @@ public sealed partial class OverviewWindow : Window
             button.Padding = new(8, 3, 8, 3); button.FontSize = 11; button.Tag = minutes; rangeButtons.Add(button); ranges.Children.Add(button);
         }
         comparisonSelectButton = OverviewTheme.Command("Select",
-            () => OpenComparisonMenu(comparisonSelectButton, comparison), "Select comparison graph type and GPU sensors");
+            () => { if (comparisonSelectButton is { } target) OpenComparisonMenu(target, comparison); },
+            "Select comparison graph type and GPU sensors");
         comparisonSelectButton.Padding = new(8, 3, 8, 3);
         ranges.Children.Add(comparisonSelectButton);
         var processButton = OverviewTheme.Command("P", comparisonProcesses.Toggle, "Show or hide GPU process details");
