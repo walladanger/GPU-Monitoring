@@ -28,6 +28,8 @@ internal sealed class GpuOverviewCard : Border
         var dot = OverviewTheme.Text("●", 16, OverviewTheme.Green); dot.Margin = new(0, 0, 8, 0); heading.Children.Add(dot);
         var right = new StackPanel { Orientation = Orientation.Horizontal };
         right.Children.Add(model);
+        var processes = OverviewTheme.Command("P", processView.Toggle, "Show or hide GPU process details");
+        processes.ToolTip = "Expand GPU processes"; processes.Padding = new(7, 3, 7, 3); right.Children.Add(processes);
         var select = OverviewTheme.Command("Select", () => SelectRequested?.Invoke(), "Select sensors for GPU panel");
         select.ToolTip = "Select this GPU's charts and sensors"; select.Padding = new(7, 3, 7, 3); right.Children.Add(select);
         var open = OverviewTheme.Command("↗", () => OpenWindowRequested?.Invoke(), "Open GPU panel in new window");

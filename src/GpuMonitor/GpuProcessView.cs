@@ -13,6 +13,7 @@ internal sealed class GpuProcessView : Expander
     {
         Header = "GPU processes  ▾";
         IsExpanded = false;
+        Visibility = Visibility.Collapsed;
         Foreground = Brushes.White;
         Margin = new(0, 10, 0, 0);
         details.TextWrapping = TextWrapping.Wrap;
@@ -20,6 +21,17 @@ internal sealed class GpuProcessView : Expander
         Content = details;
         System.Windows.Automation.AutomationProperties.SetName(this, "Expand GPU process usage");
     }
+
+    public bool IsShown
+    {
+        get => Visibility == Visibility.Visible;
+        set
+        {
+            Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            if (value) IsExpanded = true;
+        }
+    }
+    public void Toggle() => IsShown = !IsShown;
 
     public void Update(string gpuId, IReadOnlyList<ProviderSnapshot> sources)
     {

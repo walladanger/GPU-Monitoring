@@ -11,6 +11,7 @@ internal sealed class WorkspaceChartCard : Border
     private readonly StackPanel content = new(), legend = new();
     private readonly TextBlock state = OverviewTheme.Text("", 12, OverviewTheme.Muted);
     private readonly GpuProcessView processView = new();
+    private readonly System.Windows.Controls.Button processButton;
     private TelemetryPlot? plot;
     private string? axisKey;
     private WorkspacePanel? previewSize;
@@ -30,6 +31,9 @@ internal sealed class WorkspaceChartCard : Border
         CornerRadius = new(9); Padding = new(16); Margin = new(0, 0, 14, 14); Child = content;
         var heading = new DockPanel { Margin = new(0, 0, 0, 10) };
         var actions = new StackPanel { Orientation = Orientation.Horizontal };
+        processButton = OverviewTheme.Command("P", processView.Toggle, "Show or hide GPU process details");
+        processButton.ToolTip = "Expand GPU processes"; processButton.Padding = new(8, 4, 8, 4);
+        actions.Children.Add(processButton);
         var open = OverviewTheme.Command("↗", openWindow ?? (() => { }), "Open " + panel.Title + " in new window");
         open.IsEnabled = openWindow != null;
         open.ToolTip = "Open in new window"; open.Padding = new(8, 4, 8, 4); actions.Children.Add(open);
@@ -52,7 +56,8 @@ internal sealed class WorkspaceChartCard : Border
     public void Refresh(IReadOnlyList<ProviderSnapshot> sources, DateTimeOffset now, int minutes)
     {
         var gpu = Specification.Series.FirstOrDefault(s => s.Source == NvidiaTelemetry.SourceId && s.DeviceId.StartsWith("GPU-", StringComparison.Ordinal));
-        processView.Visibility = gpu == null ? Visibility.Collapsed : Visibility.Visible;
+        processButton.IsEnabled = gpu != null;
+        if (gpu == null) processView.IsShown = false;
         if (gpu != null) processView.Update(gpu.DeviceId, sources);
         var data = WorkspaceMetrics.Project(Specification, sources);
         state.Text = data.Error ?? string.Join(" · ", data.Series.Select(s => WorkspaceMetrics.StateLabel(s.State)).Distinct());
@@ -87,7 +92,7 @@ internal sealed class WorkspaceChartCard : Border
         }
     }
 
-    internal bool ProcessExpanded { get => processView.IsExpanded; set => processView.IsExpanded = value; }
+    internal bool ProcessExpanded { get => processView.IsShown; set => processView.IsShown = value; }
 
     internal void FitDetached(double width, double height)
     {

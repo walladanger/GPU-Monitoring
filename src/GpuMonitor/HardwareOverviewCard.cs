@@ -29,6 +29,8 @@ internal sealed class HardwareOverviewCard : Border
         selector.Padding = new(9, 4, 9, 4); selector.FontSize = 11;
         var actions = new StackPanel { Orientation = Orientation.Horizontal };
         actions.Children.Add(selector);
+        var processes = OverviewTheme.Command("P", processView.Toggle, "Show or hide GPU process details");
+        processes.ToolTip = "Expand GPU processes"; processes.Padding = new(7, 3, 7, 3); actions.Children.Add(processes);
         var open = OverviewTheme.Command("↗", () => OpenWindowRequested?.Invoke(),
             "Open " + (cpu ? "CPU" : "disk") + " panel in new window");
         open.ToolTip = "Open in new window"; open.Padding = new(8, 4, 8, 4);
@@ -82,9 +84,9 @@ internal sealed class HardwareOverviewCard : Border
         var availableGpus = snapshots.SelectMany(s => s.Current?.Devices ?? [])
             .Where(d => d.Source == NvidiaTelemetry.SourceId && d.Kind == DeviceKind.Gpu).ToArray();
         processGpuId ??= availableGpus.FirstOrDefault()?.Id;
-        processView.Visibility = processGpuId != null && availableGpus.Any(d => d.Id == processGpuId)
-            ? Visibility.Visible : Visibility.Collapsed;
-        if (processView.Visibility == Visibility.Visible) processView.Update(processGpuId!, snapshots);
+        bool hasGpu = processGpuId != null && availableGpus.Any(d => d.Id == processGpuId);
+        if (!hasGpu) processView.IsShown = false;
+        if (hasGpu) processView.Update(processGpuId!, snapshots);
         deviceId ??= Devices().FirstOrDefault()?.Id;
         var device = Devices().FirstOrDefault(d => d.Id == deviceId);
         var source = sources.FirstOrDefault(s => s.Source == (cpu ? "windows-system" : "windows-disks"));
