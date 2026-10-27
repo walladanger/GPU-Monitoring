@@ -80,8 +80,8 @@ public sealed partial class OverviewWindow : Window
         timer.Interval = TimeSpan.FromSeconds(settings.RefreshSeconds); timer.Tick += (_, _) => Render(DateTimeOffset.UtcNow);
         if (startMonitoring)
         {
-            // Preserve NVIDIA-only normal launch. Extra hardware/runtime sources require --sources.
-            monitoring = telemetry ?? (configuration == null ? new DashboardTelemetry([new NvidiaCollector()]) : DashboardTelemetry.Create(configuration));
+            // Default GPU process inventory shares NVIDIA polling; other hardware/runtime sources still require --sources.
+            monitoring = telemetry ?? (configuration == null ? new DashboardTelemetry([new NvidiaCollector(), new NvidiaProcessCollector()]) : DashboardTelemetry.Create(configuration));
             tray = new System.Windows.Forms.NotifyIcon { Text = "GPU Monitor", Icon = System.Drawing.SystemIcons.Application, Visible = true };
             InitializeTray();
             tray.DoubleClick += (_, _) => Dispatcher.Invoke(Restore);
