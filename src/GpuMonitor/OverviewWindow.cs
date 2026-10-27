@@ -18,6 +18,7 @@ public sealed partial class OverviewWindow : Window
     private readonly Grid root;
     private readonly Dictionary<string, GpuOverviewCard> cards = [];
     private readonly Dictionary<string, (Window Window, GpuOverviewCard Card)> gpuPopouts = [];
+    private readonly Dictionary<bool, (Window Window, HardwareOverviewCard Card)> hardwarePopouts = [];
     private readonly Dictionary<string, string> deviceColors = [];
     private int nextColor;
     private readonly WrapPanel gpuGrid = new();
@@ -59,6 +60,8 @@ public sealed partial class OverviewWindow : Window
         Grid.SetColumn(scroll, 1); workspace.Children.Add(scroll);
         empty.Margin = new(0, 30, 0, 30); body.Children.Add(empty); body.Children.Add(gpuGrid);
         hardwareRow.Children.Add(cpuCard); hardwareRow.Children.Add(diskCard); body.Children.Add(hardwareRow);
+        cpuCard.OpenWindowRequested += () => OpenHardwareWindow(true);
+        diskCard.OpenWindowRequested += () => OpenHardwareWindow(false);
         cpuCard.Plot.CursorMoved += SetCursor; diskCard.Plot.CursorMoved += SetCursor;
         customWorkspace = new(WorkspaceSources, workspaceDirectory); customWorkspace.CursorMoved += SetCursor; body.Children.Add(customWorkspace);
         customWorkspace.LayoutChanged += () => customWorkspace.Visibility = customWorkspace.PanelCount > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -252,10 +255,37 @@ public sealed partial class OverviewWindow : Window
         summary.Text = collapsed ? $"{readings.Length} GPUs" : $"{readings.Length} GPUs detected\nLast update  {session.LastSuccess?.ToLocalTime():HH:mm:ss}\n{(paused ? "Paused" : session.Health.ToString())}";
         foreach (var button in rangeButtons) button.Background = (int)button.Tag == settings.WindowMinutes ? OverviewTheme.Brush("#184880") : OverviewTheme.Surface;
         cpuCard.Update(snapshots, now, settings.WindowMinutes); diskCard.Update(snapshots, now, settings.WindowMinutes);
+        foreach (var detached in hardwarePopouts.Values)
+            detached.Card.Update(snapshots, now, settings.WindowMinutes);
         customWorkspace.Visibility = customWorkspace.PanelCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         customWorkspace.Refresh(snapshots, now, settings.WindowMinutes);
         Reflow();
     }
+    private void OpenHardwareWindow(bool cpu)
+    {
+        if (hardwarePopouts.TryGetValue(cpu, out var current)) { current.Window.Activate(); return; }
+        var card = new HardwareOverviewCard(cpu);
+        var window = new Window
+        {
+            Owner = this, Title = (cpu ? "CPU" : "Disk") + " · GPU Monitor",
+            Width = 740, Height = 460, MinWidth = 340, MinHeight = 280,
+            Background = OverviewTheme.Canvas, Foreground = Brushes.White,
+            FontFamily = new FontFamily("Segoe UI"), ResizeMode = ResizeMode.CanResize,
+            Content = new ScrollViewer
+            { Content = card, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Padding = new(14) }
+        };
+        window.SizeChanged += (_, _) =>
+        {
+            card.Width = Math.Max(290, window.ActualWidth - 56);
+            card.Plot.Height = Math.Max(112, window.ActualHeight - 230);
+        };
+        window.Closed += (_, _) => hardwarePopouts.Remove(cpu);
+        hardwarePopouts.Add(cpu, (window, card));
+        card.Update(WorkspaceSources(), viewTime, settings.WindowMinutes);
+        window.Show();
+    }
+
     private void OpenGpuWindow(string gpuId)
     {
         if (gpuPopouts.TryGetValue(gpuId, out var old)) { old.Window.Activate(); return; }
@@ -269,6 +299,12 @@ public sealed partial class OverviewWindow : Window
             FontFamily = new FontFamily("Segoe UI"), ResizeMode = ResizeMode.CanResize,
             Content = new ScrollViewer
             { Content = card, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new(14) }
+        };
+        window.SizeChanged += (_, _) =>
+        {
+            card.Width = Math.Max(320, window.ActualWidth - 56);
+            double chartHeight = Math.Max(128, (window.ActualHeight - 340) / 2);
+            card.Usage.Height = card.Memory.Height = chartHeight;
         };
         window.Closed += (_, _) => gpuPopouts.Remove(gpuId);
         gpuPopouts.Add(gpuId, (window, card));
