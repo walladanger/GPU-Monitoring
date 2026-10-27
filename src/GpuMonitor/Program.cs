@@ -15,6 +15,7 @@ public static class Program
 {
     [STAThread] public static void Main(string[] args)
     {
+        DevelopmentLog.Start(args.Any(a => a.StartsWith("--verify-", StringComparison.Ordinal)) ? Path.Combine(AppContext.BaseDirectory, "development.log") : null);
         if (args.Contains("--collect"))
         {
             // No Application, Window, tray icon or single-instance UI mutex in collector mode.
@@ -39,6 +40,7 @@ public static class Program
             }
             return;
         }
+        if (args.Contains("--verify-panels")) { PanelSurfaceChecks.Run(); return; }
         if (args.Contains("--verify-overview")) { OverviewChecks.Run(); return; }
         if (args.Contains("--verify-monitoring")) { OverviewMonitoringChecks.Run(); return; }
         if (args.Contains("--verify-live-overview"))

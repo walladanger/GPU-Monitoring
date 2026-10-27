@@ -13,6 +13,7 @@ internal sealed class WorkspacePanelEditor : Window
     private readonly StackPanel choices = new();
     private readonly TextBlock status = OverviewTheme.Text("", 12, OverviewTheme.Muted);
     private readonly RadioButton area = new() { Content = "Area", Foreground = Brushes.White, Margin = new(16, 0, 0, 0), GroupName = "ChartType" };
+    private readonly RadioButton lanes = new() { Content = "Stacked lanes (up to 8)", Foreground = Brushes.White, Margin = new(16, 0, 0, 0), GroupName = "ChartType" };
     internal readonly Dictionary<WorkspaceSeries, CheckBox> VisibleChoices = [];
     internal readonly System.Windows.Controls.Button ApplyButton;
     public WorkspacePanel? Result { get; private set; }
@@ -36,7 +37,7 @@ internal sealed class WorkspacePanelEditor : Window
                 savedBindings[binding].Unit ?? "", savedBindings[binding].State));
         }
         catalog = available.AsReadOnly();
-        var root = new DockPanel { Margin = new(18) }; Content = root;
+        var root = new DockPanel { Margin = new(18) }; AllowsTransparency = true; WindowStyle = WindowStyle.None; Background = Brushes.Transparent; Content = new FrostedPanel { Backdrop = owner?.Content as FrameworkElement, Child = root };
         var header = new StackPanel(); DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
         header.Children.Add(OverviewTheme.DialogHeading(this));
         header.Children.Add(OverviewTheme.Text("Panel title", 13, OverviewTheme.Muted));
@@ -45,7 +46,7 @@ internal sealed class WorkspacePanelEditor : Window
         search = Input(initialQuery, "Search monitoring sensors"); header.Children.Add(search);
         var mode = new StackPanel { Orientation = Orientation.Horizontal, Margin = new(0, 4, 0, 12) };
         mode.Children.Add(new RadioButton { Content = "Line", IsChecked = original.Chart == "line", Foreground = Brushes.White, GroupName = "ChartType" });
-        area.IsChecked = original.Chart == "area"; mode.Children.Add(area); header.Children.Add(mode);
+        area.IsChecked = original.Chart == "area"; mode.Children.Add(area); lanes.IsChecked = original.Chart == "lanes"; mode.Children.Add(lanes); header.Children.Add(mode);
         var footer = new DockPanel { Margin = new(0, 12, 0, 0) }; DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
         ApplyButton = OverviewTheme.Command("Apply", () => { if (TryApply()) DialogResult = true; });
         ApplyButton.IsDefault = true; DockPanel.SetDock(ApplyButton, Dock.Right); footer.Children.Add(ApplyButton);
@@ -76,12 +77,12 @@ internal sealed class WorkspacePanelEditor : Window
         if (choices.Children.Count == 0) choices.Children.Add(OverviewTheme.Text("No matching sensors from the enabled sources.", 13, OverviewTheme.Muted));
         Count();
     }
-    private void Count() => status.Text = $"{selected.Count} selected · up to 16 sensors · two units on labeled left/right axes";
+    private void Count() => status.Text = $"{selected.Count} selected · up to 16 overlay sensors / 8 stacked lanes · up to 8 distinct units";
     private bool TryApply()
     {
         var selectedChoices = catalog.Where(c => selected.Contains(c.Selection)).ToArray();
         var series = selectedChoices.Select(c => c.Selection).ToArray();
-        var candidate = original with { Title = title.Text.Trim(), Chart = area.IsChecked == true ? "area" : "line", Series = series };
+        var candidate = original with { Title = title.Text.Trim(), Chart = lanes.IsChecked == true ? "lanes" : area.IsChecked == true ? "area" : "line", Series = series };
         try
         {
             if (series.Length is < 1 or > 16) throw new FormatException("Select between 1 and 16 sensors.");

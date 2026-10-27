@@ -16,7 +16,7 @@ The v2 development branch opens the new native Overview with larger LiveCharts2
 GPU/VRAM plots, synchronized inspection and a GPU comparison. Use `--legacy-ui`
 to open the earlier dashboard. The new view remains subject to visual signoff;
 see `docs/GPU_MONITOR_V2_OVERVIEW.md` in the repository for scope and limits.
-Right-click an Overview graph to export its visible samples as CSV or JSON. Collection now runs independently of rendering, with pause/rescan and awaited shutdown. An explicit `--sources <configuration.json>` enables the configured backend sources; extra hardware/runtime panels remain planned. Normal launch retains NVIDIA-only collection.
+Right-click an Overview graph to export its visible samples as CSV or JSON. Collection now runs independently of rendering, with pause/rescan and awaited shutdown. An explicit `--sources <configuration.json>` enables the configured backend sources; extra hardware/runtime panels remain planned. Normal launch collects NVIDIA sensors and compute-process VRAM through one shared collector per source.
 
 - All-GPU and per-GPU views
 - 1, 2, 5 or 10 second refresh intervals
@@ -45,3 +45,17 @@ dotnet publish GpuMonitor.csproj -c Release -r win-x64 --self-contained true -p:
 Run `GpuMonitor.exe --self-test` to validate inventory changes and parsing. It writes `self-test-result.txt` beside the executable. `--verify-ui` validates panels/options against real detected GPUs, saves a preview and exits; requires at least one NVIDIA GPU.
 
 The repository's Windows workflow builds, checks the inventory behavior, and produces a self-contained ZIP plus an Inno Setup installer as downloadable workflow artifacts.
+
+## Customizable panel surfaces
+
+Every default GPU, CPU, disk and comparison surface has an actions button, a real separate-window action and a live resize grip. The actions menu selects multiple measured sensors (line/area overlays with up to eight independent unit groups, or up to eight stacked sensor lanes), restores the default view, and resets sizing. Graph-level controls select line/area/stacked-lane views and time ranges. Current readings and scales sit inside the chart. Surface and window scrollbars appear automatically when content does not fit. Closing a detached surface restores the same live view; collection remains owned by the dashboard. Closing the dashboard closes its detached windows.
+
+Default surface dimensions and sensor choices persist by GPU UUID in settings.json. Custom workspace layouts use the existing named presets. GPU process expanders show only matching NVIDIA compute processes, measured VRAM where available, and explicit disabled/stale/unsupported/empty states. Graphics-process attribution and per-process GPU utilization are not supplied by the current collector. Device-wide power, temperatures, fan and clocks cannot be attributed to individual processes.
+
+Development logging starts with the executable and rotates at 2 MiB, retaining one previous file. Open **Settings → Open development log** or `%LOCALAPPDATA%\GpuMonitor\logs\development.log`. It records startup, panel creation, selection, resizing, detachment/restoration, inventory changes, preset failures and unhandled errors. It does not record process inventories or raw telemetry payloads. Verification runs write logs beside the build output instead of user settings.
+
+`--verify-panels` checks panel window lifecycle, shared snapshot updates, multiple axes, live resize/cancel, scrollbars, persistence, readouts, logging and process availability states using synthetic fixtures. Existing `--verify-workspace`, `--verify-monitoring`, `--verify-overview` and `--verify-charts` exercise the surrounding UI. Physical pointer behavior across monitors and DPI changes still needs human verification.
+
+Point inspection: hover to inspect measured values in a translucent rounded card with a blurred chart backdrop. Left-click within 16 display pixels of a measured point to pin and highlight it. Telemetry updates and hover movement preserve that exact sample; click it again, click outside the graph, leave the application, or press Escape to deselect. Zoom in/out and reset are visible on every chart and retain the existing keyboard, wheel and context-menu actions. Raw exports preserve source measurements and units in all graph modes, including stacked lanes.
+
+Settings, chart and panel action menus (including nested menus), sensor selection and tooltips use rounded translucent gradient surfaces. The backdrop is sampled and blurred separately, leaving foreground controls and text sharp. Resize targets sit on the outer corner and right/bottom surface edges. Native detached windows also retain normal Windows border resizing.

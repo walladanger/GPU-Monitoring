@@ -5,6 +5,7 @@ namespace GpuMonitor;
 
 public sealed class Settings
 {
+    public Dictionary<string, GpuPanelSettings> GpuPanels { get; set; } = new();
     public int RefreshSeconds { get; set; } = 2;
     public int WindowMinutes { get; set; } = 5;
     public bool MinimizeToTray { get; set; } = true;
@@ -17,6 +18,9 @@ public sealed class Settings
     public static string HistoryPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GpuMonitor", "history", "telemetry.sqlite");
     public void Normalize()
     {
+        GpuPanels ??= new();
+        GpuPanels = GpuPanels.Where(p => p.Value != null).Take(128).ToDictionary(p => p.Key, p => p.Value);
+        foreach (var panel in GpuPanels.Values) panel.Normalize();
         RefreshSeconds = new[] { 1, 2, 5, 10 }.Contains(RefreshSeconds) ? RefreshSeconds : 2;
         WindowMinutes = new[] { 1, 5, 15, 30 }.Contains(WindowMinutes) ? WindowMinutes : 5;
         HistoryDays = HistoryDays is >= 1 and <= 30 ? HistoryDays : 7;

@@ -24,7 +24,7 @@ public sealed partial class TelemetryPlot
     private void WireNavigation()
     {
         Children.Add(viewState);
-        ToolTip = "Ctrl+wheel / Ctrl+plus/minus: zoom · Ctrl+Left/Right: pan · Ctrl+Space: pause · Ctrl+Home: live/reset. Right-click for exports and series.";
+        ToolTip = "Click a measured point to pin details. Escape or click outside to deselect. Ctrl+wheel zooms; use + / − / reset for zoom controls.";
         PreviewMouseDown += (_, _) => Focus();
         MouseDown += (_, e) => { if (e.ChangedButton == MouseButton.Left) { Focus(); e.Handled = true; } };
         PreviewMouseWheel += (_, e) =>

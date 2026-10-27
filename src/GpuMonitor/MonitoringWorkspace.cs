@@ -57,6 +57,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     {
         WorkspacePresetStore.Validate(layout);
         previous = Layout; Layout = layout;
+        foreach (var card in cards.Values) card.CloseDetached();
         panels.Children.Clear(); cards.Clear();
         foreach (var panel in layout.Panels)
         {
@@ -170,12 +171,13 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     {
         if (!IsEnabled) return;
         IsEnabled = false;
+        DevelopmentLog.Write("workspace-file", "Starting preset operation");
         try { await action(); }
-        catch (Exception error) { if (IsLoaded) MessageBox.Show(Window.GetWindow(this), error.Message, "Workspace preset could not be saved or loaded"); }
-        finally { IsEnabled = true; }
+        catch (Exception error) { DevelopmentLog.Write("workspace-error", error.ToString()); if (IsLoaded) MessageBox.Show(Window.GetWindow(this), error.Message, "Workspace preset could not be saved or loaded"); }
+        finally { IsEnabled = true; DevelopmentLog.Write("workspace-file", "Preset operation completed"); }
     }
     internal IReadOnlyList<string> PresetNames() => store.ListPresets();
-    internal Task SavePresetAsync(string id) => store.SaveAsync(id, Layout);
+    internal Task SavePresetAsync(string id) { DevelopmentLog.Write("workspace-save", id); return store.SaveAsync(id, Layout); }
     internal async Task LoadPresetAsync(string id) => ApplyLayout(await store.LoadAsync(id));
 }
 

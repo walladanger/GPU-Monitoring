@@ -12,6 +12,16 @@ namespace GpuMonitor;
 
 internal static class OverviewTheme
 {
+    internal static void InstallPopupStyles()
+    {
+        var resources = System.Windows.Application.Current?.Resources;
+        if (resources == null || resources.Contains(typeof(ToolTip))) return;
+        resources[typeof(ToolTip)] = (Style)System.Windows.Markup.XamlReader.Parse(@"
+<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:local='clr-namespace:GpuMonitor;assembly=GpuMonitor' TargetType='ToolTip'>
+ <Setter Property='Foreground' Value='White'/><Setter Property='Background' Value='Transparent'/><Setter Property='BorderThickness' Value='0'/>
+ <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ToolTip'><local:FrostedPanel Padding='9'><ContentPresenter/></local:FrostedPanel></ControlTemplate></Setter.Value></Setter>
+</Style>");
+    }
     public static TextBlock DialogHeading(Window window)
     {
         window.WindowStyle = WindowStyle.None;
@@ -88,11 +98,32 @@ internal static class OverviewTheme
     }
     public static ContextMenu Menu()
     {
-        var menu = new ContextMenu { Background = Surface, Foreground = Brushes.White, BorderBrush = Border };
-        menu.Resources[SystemColors.MenuBrushKey] = Surface;
-        menu.Resources[SystemColors.MenuTextBrushKey] = Brushes.White;
-        menu.Resources[SystemColors.ControlBrushKey] = Surface;
-        menu.Resources[SystemColors.ControlTextBrushKey] = Brushes.White;
+        var menu = new ContextMenu { Background = Brushes.Transparent, Foreground = Brushes.White, BorderThickness = new(0), HasDropShadow = true };
+        menu.Template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(@"
+<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:local='clr-namespace:GpuMonitor;assembly=GpuMonitor' TargetType='ContextMenu'>
+ <local:FrostedPanel Padding='6'><ScrollViewer MaxHeight='650' VerticalScrollBarVisibility='Auto'><ItemsPresenter/></ScrollViewer></local:FrostedPanel>
+</ControlTemplate>");
+        var style = (Style)System.Windows.Markup.XamlReader.Parse(@"
+<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' xmlns:local='clr-namespace:GpuMonitor;assembly=GpuMonitor' TargetType='MenuItem'>
+ <Setter Property='Foreground' Value='White'/><Setter Property='Padding' Value='10,7'/>
+ <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='MenuItem'>
+  <Grid><Border x:Name='Highlight' CornerRadius='7' Background='Transparent' Padding='{TemplateBinding Padding}'>
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='18'/><ColumnDefinition Width='*'/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions>
+    <TextBlock x:Name='Check' Text='✓' Visibility='Collapsed'/><ContentPresenter Grid.Column='1' ContentSource='Header' RecognizesAccessKey='True'/><TextBlock x:Name='Arrow' Grid.Column='2' Text='›' Margin='16,0,0,0' Visibility='Collapsed'/>
+   </Grid></Border>
+   <Popup x:Name='PART_Popup' Placement='Right' HorizontalOffset='2' AllowsTransparency='True' IsOpen='{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}' Focusable='False'>
+    <local:FrostedPanel Padding='6'><ScrollViewer MaxHeight='600' VerticalScrollBarVisibility='Auto'><ItemsPresenter/></ScrollViewer></local:FrostedPanel>
+   </Popup>
+  </Grid>
+  <ControlTemplate.Triggers>
+   <Trigger Property='IsHighlighted' Value='True'><Setter TargetName='Highlight' Property='Background' Value='#705080A0'/></Trigger>
+   <Trigger Property='IsChecked' Value='True'><Setter TargetName='Check' Property='Visibility' Value='Visible'/></Trigger>
+   <Trigger Property='HasItems' Value='True'><Setter TargetName='Arrow' Property='Visibility' Value='Visible'/></Trigger>
+   <Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.45'/></Trigger>
+  </ControlTemplate.Triggers>
+ </ControlTemplate></Setter.Value></Setter>
+</Style>");
+        menu.Resources[typeof(MenuItem)] = style;
         return menu;
     }
     public static void PlotMenu(TelemetryPlot plot, string rawUnit, string title)
