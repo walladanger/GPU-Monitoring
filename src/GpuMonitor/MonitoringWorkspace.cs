@@ -18,7 +18,6 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     public WorkspaceLayout Layout { get; private set; } = new(1, "Custom workspace", []);
     public int PanelCount => Layout.Panels.Count;
     public IEnumerable<TelemetryPlot> Plots => cards.Values.Select(c => c.Plot).OfType<TelemetryPlot>();
-    public event Action<DateTimeOffset?>? CursorMoved;
     public event Action? LayoutChanged;
     internal System.Windows.Controls.Button AddButton { get; }
     internal System.Windows.Controls.Button PresetsButton { get; }
@@ -57,11 +56,11 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     {
         WorkspacePresetStore.Validate(layout);
         previous = Layout; Layout = layout;
+        foreach (var card in cards.Values) card.CloseDetached();
         panels.Children.Clear(); cards.Clear();
         foreach (var panel in layout.Panels)
         {
             var card = new WorkspaceChartCard(panel, () => OpenPanelMenu(panel.Id)) { Focusable = true };
-            card.CursorMoved += value => CursorMoved?.Invoke(value);
             card.MouseLeftButtonDown += (_, _) => { if (!card.IsKeyboardFocusWithin) card.Focus(); };
             card.PreviewKeyDown += (_, e) =>
             {
@@ -142,7 +141,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     private void Reflow()
     {
         double width = panels.ActualWidth; if (width <= 0) return;
-        int columns = Math.Max(1, (int)Math.Floor(width / 500));
+        int columns = Math.Min(Math.Max(1, cards.Values.Sum(card => card.LayoutWidthSlots)), Math.Max(1, (int)Math.Floor(width / 500)));
         foreach (var card in cards.Values) card.Width = Math.Max(260, width / columns * Math.Min(columns, card.LayoutWidthSlots) - 14);
     }
 
@@ -170,12 +169,13 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     {
         if (!IsEnabled) return;
         IsEnabled = false;
+        DevelopmentLog.Write("workspace-file", "Starting preset operation");
         try { await action(); }
-        catch (Exception error) { if (IsLoaded) MessageBox.Show(Window.GetWindow(this), error.Message, "Workspace preset could not be saved or loaded"); }
-        finally { IsEnabled = true; }
+        catch (Exception error) { DevelopmentLog.Write("workspace-error", error.ToString()); if (IsLoaded) MessageBox.Show(Window.GetWindow(this), error.Message, "Workspace preset could not be saved or loaded"); }
+        finally { IsEnabled = true; DevelopmentLog.Write("workspace-file", "Preset operation completed"); }
     }
     internal IReadOnlyList<string> PresetNames() => store.ListPresets();
-    internal Task SavePresetAsync(string id) => store.SaveAsync(id, Layout);
+    internal Task SavePresetAsync(string id) { DevelopmentLog.Write("workspace-save", id); return store.SaveAsync(id, Layout); }
     internal async Task LoadPresetAsync(string id) => ApplyLayout(await store.LoadAsync(id));
 }
 

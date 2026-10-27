@@ -46,10 +46,13 @@ internal static class WorkspacePresentationChecks
             "Selecting two unit groups assigns distinct labeled axes");
         check(WorkspaceMetrics.AssignAxes(catalog, [selection with { Axis = 1 }]).Single(s => s.MetricKey == "ram.used").Axis == 0,
             "Editing preserves a saved right-axis selection and uses the free left axis for a new unit");
+        var eight = Enumerable.Range(0, 8).Select(i => catalog[0] with { Selection = selection with { MetricKey = "unit-" + i }, Unit = "u" + i }).ToArray();
+        var eightAxes = WorkspaceMetrics.AssignAxes(eight, []);
+        check(eightAxes.Select(s => s.Axis).Distinct().Count() == 8, "Eight distinct data types receive independent unit axes");
         bool rejected = false;
-        try { WorkspaceMetrics.AssignAxes(catalog.Concat([catalog[0] with { Selection = selection with { MetricKey = "watts" }, Unit = "W" }]).ToArray(), []); }
+        try { WorkspaceMetrics.AssignAxes(eight.Concat([eight[0] with { Selection = selection with { MetricKey = "ninth" }, Unit = "u8" }]).ToArray(), []); }
         catch (FormatException) { rejected = true; }
-        check(rejected, "A third unit requires another panel instead of silently sharing an incompatible axis");
+        check(rejected, "A ninth distinct unit is explicitly rejected rather than sharing an incompatible scale");
         var unknown = WorkspaceMetrics.Project(panel with { Series = [selection with { Source = "offline", Axis = 1 }] }, []);
         check(unknown.Error == null && unknown.Axes.Single().RawUnit == "" && unknown.Series.Single().Samples.Count == 0,
             "Unknown source units remain unknown without fabricating data or a converted trace");

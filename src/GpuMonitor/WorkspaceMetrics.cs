@@ -11,7 +11,8 @@ public sealed record WorkspaceAxis(int Index, string RawUnit)
 {
     public string DisplayUnit => RawUnit is "B" or "MiB" ? " GiB" : RawUnit == "%" ? "%" : " " + RawUnit;
     public double Divisor => RawUnit == "B" ? 1073741824 : RawUnit == "MiB" ? 1024 : 1;
-    public double? Maximum => RawUnit == "%" ? 100 : null;
+    public double? MaximumOverride { get; init; }
+    public double? Maximum => MaximumOverride ?? (RawUnit == "%" ? 100 : null);
 }
 public sealed record WorkspaceChartData(string Unit, string? Error, IReadOnlyList<WorkspaceChartSeries> Series,
     IReadOnlyList<WorkspaceAxis> Axes);
@@ -78,9 +79,8 @@ public static class WorkspaceMetrics
             int axis;
             if (saved != null) axis = saved.Axis;
             else if (units.Any(p => p.Value == choice.Unit)) axis = units.First(p => p.Value == choice.Unit).Key;
-            else if (!units.ContainsKey(0)) axis = 0;
-            else if (!units.ContainsKey(1)) axis = 1;
-            else throw new FormatException("At most two different units can share a panel. Use a separate panel for another unit.");
+            else if (units.Count < 8) axis = Enumerable.Range(0, 8).First(i => !units.ContainsKey(i));
+            else throw new FormatException("At most eight different unit groups can share a panel.");
             if (units.TryGetValue(axis, out var unit) && unit.Length > 0 && choice.Unit.Length > 0 && unit != choice.Unit)
                 throw new FormatException("Saved sensors have incompatible units on the same axis. Remove a conflicting sensor first.");
             if (!units.ContainsKey(axis) || choice.Unit.Length > 0) units[axis] = choice.Unit;

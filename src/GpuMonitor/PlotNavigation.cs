@@ -13,9 +13,12 @@ public sealed partial class TelemetryPlot
     private IReadOnlyList<IReadOnlyList<TelemetrySample>>? frozenHistories;
     private DateTimeOffset latestTime, frozenTime;
     private PlotRange? viewRange;
-    private readonly TextBlock viewState = new() { FontSize = 10, Foreground = OverviewTheme.Muted,
-        Margin = new(60, 4, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
-        IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+    private readonly TextBlock viewState = new() { FontSize = 11, Foreground = OverviewTheme.Muted,
+        Margin = new(4, 2, 4, 5), TextWrapping = TextWrapping.Wrap, IsHitTestVisible = false };
+    private System.Windows.Controls.Button pauseButton = null!, zoomInButton = null!, zoomOutButton = null!;
+    internal string NavigationStatus => viewState.Text;
+    internal string InspectionText => inspection.Text;
+    internal bool IsInspecting => detailPanel.Visibility == Visibility.Visible;
     public bool IsViewPaused => viewRange != null;
     public PlotRange? ViewRange => latestHistories.Count == 0 ? null : viewRange ?? new(latestTime.AddMinutes(-windowMinutes), latestTime);
     public IReadOnlyList<string> SeriesNames => series.Select(s => s.Name ?? "Series").ToArray();
@@ -23,14 +26,27 @@ public sealed partial class TelemetryPlot
 
     private void WireNavigation()
     {
-        Children.Add(viewState);
-        ToolTip = "Ctrl+wheel / Ctrl+plus/minus: zoom · Ctrl+Left/Right: pan · Ctrl+Space: pause · Ctrl+Home: live/reset. Right-click for exports and series.";
+        var toolbar = new StackPanel();
+        var actions = new WrapPanel { Margin = new(0, 0, 0, 2) };
+        System.Windows.Controls.Button Add(string label, Action action, string help) {
+            var button = OverviewTheme.Command(label, action, label == "↺ Live" ? "Reset to live" : label.Trim('+', '−', '←', '→', ' ')); button.ToolTip = help;
+            button.Padding = new(6, 4, 6, 4); button.Margin = new(2); button.FontSize = 11;
+            actions.Children.Add(button); return button;
+        }
+        zoomInButton = Add("+ Zoom in", () => Zoom(.5), "Zoom in · Ctrl++ or Ctrl+wheel");
+        zoomOutButton = Add("− Zoom out", () => Zoom(2), "Zoom out · Ctrl+− or Ctrl+wheel");
+        Add("← Earlier", () => Pan(-.25), "Pan earlier · Ctrl+Left");
+        Add("Later →", () => Pan(.25), "Pan later · Ctrl+Right");
+        pauseButton = Add("Pause", () => { if (IsViewPaused) ResetView(); else PauseView(); }, "Pause or resume chart · Ctrl+Space");
+        Add("↺ Live", ResetView, "Reset zoom and return to live · Ctrl+Home");
+        toolbar.Children.Add(actions); toolbar.Children.Add(viewState); Children.Add(toolbar);
+        RefreshViewState();
         PreviewMouseDown += (_, _) => Focus();
         MouseDown += (_, e) => { if (e.ChangedButton == MouseButton.Left) { Focus(); e.Handled = true; } };
-        PreviewMouseWheel += (_, e) =>
+        chart.PreviewMouseWheel += (_, e) =>
         {
             if (Keyboard.Modifiers != ModifierKeys.Control) return;
-            double anchor = Math.Clamp((e.GetPosition(chart).X - 4) / Math.Max(1, ActualWidth - 8), 0, 1);
+            double anchor = Math.Clamp((e.GetPosition(chart).X - 4) / Math.Max(1, chart.ActualWidth - 8), 0, 1);
             Zoom(e.Delta > 0 ? .5 : 2, anchor); e.Handled = true;
         };
         PreviewKeyDown += (_, e) =>
@@ -61,30 +77,38 @@ public sealed partial class TelemetryPlot
     {
         PauseView(); if (viewRange == null) return;
         viewRange = viewRange.Zoom(factor, anchor, new(frozenTime.AddMinutes(-30), frozenTime));
-        SetCursor(null); CursorMoved?.Invoke(null); RenderView();
+        ClearSelection(); RenderView();
     }
     public void Pan(double fraction)
     {
         PauseView(); if (viewRange == null) return;
         viewRange = viewRange.Pan(fraction, new(frozenTime.AddMinutes(-30), frozenTime));
-        SetCursor(null); CursorMoved?.Invoke(null); RenderView();
+        ClearSelection(); RenderView();
     }
     public void ResetView()
     {
-        viewRange = null; frozenHistories = null;
-        SetCursor(null); CursorMoved?.Invoke(null);
+        viewRange = null; frozenHistories = null; ClearSelection();
         if (latestHistories.Count > 0) RenderView(); else RefreshViewState();
     }
     public void ShowSeries(int index, bool show)
     {
-        series[index].IsVisible = show;
-        SetCursor(null); CursorMoved?.Invoke(null);
+        series[index].IsVisible = show; ClearSelection();
         if (latestHistories.Count > 0) RenderView();
     }
     private void RefreshViewState()
     {
-        viewState.Visibility = IsViewPaused ? Visibility.Visible : Visibility.Collapsed;
-        viewState.Text = "View paused · reset to live";
+        var range = ViewRange;
+        double seconds = range?.Duration.TotalSeconds ?? windowMinutes * 60;
+        double percent = windowMinutes * 6000d / seconds;
+        string span = seconds >= 60 ? $"{seconds / 60:0.##} min" : $"{seconds:0.#} sec";
+        viewState.Text = $"{(IsViewPaused ? "Paused" : "Live")} · Zoom {percent:0.#}% · {span}" +
+            (range == null ? " · Waiting for data" : $"\n{range.Start.ToLocalTime():HH:mm:ss} – {range.End.ToLocalTime():HH:mm:ss}");
+        if (pauseButton == null) return;
+        pauseButton.Content = IsViewPaused ? "Resume" : "Pause";
+        System.Windows.Automation.AutomationProperties.SetName(pauseButton, IsViewPaused ? "Resume" : "Pause");
+        OverviewTheme.SetSelected(pauseButton, IsViewPaused);
+        zoomInButton.IsEnabled = range != null && seconds > 10;
+        zoomOutButton.IsEnabled = range != null && seconds < 1800;
     }
     public void SavePng(string path)
     {

@@ -3,6 +3,7 @@ __pycache__/
 gpu-log.csv
 **/bin/
 **/obj/
+/artifacts/
 src/GpuMonitor/publish/
 src/GpuMonitor/artifacts/
 src/GpuMonitor/GPU-Monitor-Windows-x64.zip
