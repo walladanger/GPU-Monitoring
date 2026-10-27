@@ -289,8 +289,8 @@ public sealed partial class OverviewWindow : Window
         summary.Text = collapsed ? $"{readings.Length} GPUs" : $"{readings.Length} GPUs detected\nLast update  {session.LastSuccess?.ToLocalTime():HH:mm:ss}\n{(paused ? "Paused" : session.Health.ToString())}";
         foreach (var button in rangeButtons) button.Background = (int)button.Tag == settings.WindowMinutes ? OverviewTheme.Brush("#184880") : OverviewTheme.Surface;
         cpuCard.Update(snapshots, now, settings.WindowMinutes); diskCard.Update(snapshots, now, settings.WindowMinutes);
-        foreach (var detached in hardwarePopouts.Values)
-            detached.Card.Update(snapshots, now, settings.WindowMinutes);
+        foreach (var hardwareDetached in hardwarePopouts.Values)
+            hardwareDetached.Card.Update(snapshots, now, settings.WindowMinutes);
         customWorkspace.Visibility = customWorkspace.PanelCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         customWorkspace.Refresh(snapshots, now, settings.WindowMinutes);
         Reflow();
