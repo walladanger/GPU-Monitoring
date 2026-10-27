@@ -10,6 +10,7 @@ internal sealed class WorkspaceChartCard : Border
 {
     private readonly StackPanel content = new(), legend = new();
     private readonly TextBlock state = OverviewTheme.Text("", 12, OverviewTheme.Muted);
+    private readonly GpuProcessView processView = new();
     private TelemetryPlot? plot;
     private string? axisKey;
     private WorkspacePanel? previewSize;
@@ -21,19 +22,24 @@ internal sealed class WorkspaceChartCard : Border
     internal int LayoutWidthSlots => previewSize?.WidthSlots ?? Specification.WidthSlots;
     public event Action<DateTimeOffset?>? CursorMoved;
 
-    public WorkspaceChartCard(WorkspacePanel panel, Action openOptions)
+    public WorkspaceChartCard(WorkspacePanel panel, Action openOptions, Action openSelection, Action openWindow)
     {
         Specification = panel;
         Background = OverviewTheme.Surface; BorderBrush = OverviewTheme.Border; BorderThickness = new(1);
         CornerRadius = new(9); Padding = new(16); Margin = new(0, 0, 14, 14); Child = content;
         var heading = new DockPanel { Margin = new(0, 0, 0, 10) };
+        var actions = new StackPanel { Orientation = Orientation.Horizontal };
+        var open = OverviewTheme.Command("↗", openWindow, "Open " + panel.Title + " in new window");
+        open.ToolTip = "Open in new window"; open.Padding = new(8, 4, 8, 4); actions.Children.Add(open);
+        var select = OverviewTheme.Command("Select", openSelection, "Select graph and sensors for " + panel.Title);
+        select.ToolTip = "Choose graph type and sensors"; select.Padding = new(8, 4, 8, 4); actions.Children.Add(select);
         var options = OverviewTheme.Command("⋮", openOptions, "Options for " + panel.Title);
-        DockPanel.SetDock(options, Dock.Right); heading.Children.Add(options);
+        actions.Children.Add(options); DockPanel.SetDock(actions, Dock.Right); heading.Children.Add(actions);
         TitleHandle = Handle(panel.Title, 16, OverviewTheme.Text("", 16).Foreground, Cursors.SizeAll);
         TitleHandle.ToolTip = "Drag this title onto another panel to reorder. " + panel.Title;
         System.Windows.Automation.AutomationProperties.SetName(TitleHandle, "Move " + panel.Title);
         heading.Children.Add(TitleHandle); content.Children.Add(heading);
-        state.TextWrapping = TextWrapping.Wrap; state.Margin = new(0, 0, 0, 8); content.Children.Add(state); content.Children.Add(legend);
+        state.TextWrapping = TextWrapping.Wrap; state.Margin = new(0, 0, 0, 8); content.Children.Add(state); content.Children.Add(legend); content.Children.Add(processView);
         ResizeGrip = Handle("◢", 14, OverviewTheme.Muted, Cursors.SizeNWSE);
         ResizeGrip.Width = 20; ResizeGrip.Height = 18; ResizeGrip.HorizontalAlignment = HorizontalAlignment.Right;
         ResizeGrip.ToolTip = "Drag to resize; dimensions snap to slots and rows. Escape cancels.";
@@ -42,6 +48,9 @@ internal sealed class WorkspaceChartCard : Border
 
     public void Refresh(IReadOnlyList<ProviderSnapshot> sources, DateTimeOffset now, int minutes)
     {
+        var gpu = Specification.Series.FirstOrDefault(s => s.Source == NvidiaTelemetry.SourceId && s.DeviceId.StartsWith("GPU-", StringComparison.Ordinal));
+        processView.Visibility = gpu == null ? Visibility.Collapsed : Visibility.Visible;
+        if (gpu != null) processView.Update(gpu.DeviceId, sources);
         var data = WorkspaceMetrics.Project(Specification, sources);
         state.Text = data.Error ?? string.Join(" · ", data.Series.Select(s => WorkspaceMetrics.StateLabel(s.State)).Distinct());
         if (data.Error != null)
@@ -74,6 +83,8 @@ internal sealed class WorkspaceChartCard : Border
             legend.Children.Add(label);
         }
     }
+
+    internal bool ProcessExpanded { get => processView.IsExpanded; set => processView.IsExpanded = value; }
 
     internal void PreviewSize(WorkspacePanel? dimensions)
     {

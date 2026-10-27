@@ -11,6 +11,9 @@ internal sealed class GpuOverviewCard : Border
     private readonly TextBlock memoryAmount = OverviewTheme.Text("", 12, OverviewTheme.Muted);
     private readonly TextBlock power = OverviewTheme.Text("N/A", 15), temp = OverviewTheme.Text("N/A", 15), fan = OverviewTheme.Text("N/A", 15);
     private readonly TextBlock details = OverviewTheme.Text("", 12, OverviewTheme.Muted);
+    private readonly GpuProcessView processView = new();
+    public event Action? OpenWindowRequested;
+    public event Action? SelectRequested;
     public TelemetryPlot Usage { get; } = new("%", 100) { Height = 128 };
     public TelemetryPlot Memory { get; } = new(" GiB") { Height = 128 };
     public IEnumerable<TelemetryPlot> Plots => new[] { Usage, Memory };
@@ -23,7 +26,13 @@ internal sealed class GpuOverviewCard : Border
         var content = new StackPanel(); Child = content;
         var heading = new DockPanel { Margin = new(0, 0, 0, 12) };
         var dot = OverviewTheme.Text("●", 16, OverviewTheme.Green); dot.Margin = new(0, 0, 8, 0); heading.Children.Add(dot);
-        DockPanel.SetDock(model, Dock.Right); heading.Children.Add(model); heading.Children.Add(title); content.Children.Add(heading);
+        var right = new StackPanel { Orientation = Orientation.Horizontal };
+        right.Children.Add(model);
+        var select = OverviewTheme.Command("Select", () => SelectRequested?.Invoke(), "Select sensors for GPU panel");
+        select.ToolTip = "Select this GPU's charts and sensors"; select.Padding = new(7, 3, 7, 3); right.Children.Add(select);
+        var open = OverviewTheme.Command("↗", () => OpenWindowRequested?.Invoke(), "Open GPU panel in new window");
+        open.ToolTip = "Open GPU panel in new window"; open.Padding = new(7, 3, 7, 3); right.Children.Add(open);
+        DockPanel.SetDock(right, Dock.Right); heading.Children.Add(right); heading.Children.Add(title); content.Children.Add(heading);
         content.Children.Add(MetricRegion("Utilization", Usage, usageValue));
         var memoryNumbers = new StackPanel(); memoryNumbers.Children.Add(memoryValue); memoryAmount.Margin = new(0, 5, 0, 0); memoryNumbers.Children.Add(memoryAmount);
         content.Children.Add(MetricRegion("Memory", Memory, memoryNumbers));
@@ -34,7 +43,7 @@ internal sealed class GpuOverviewCard : Border
             pair.Item2.Margin = new(0, 5, 0, 0); column.Children.Add(pair.Item2); footer.Children.Add(column);
         }
         content.Children.Add(footer); details.Margin = new(0, 12, 0, 0); details.TextWrapping = TextWrapping.Wrap;
-        details.Visibility = Visibility.Collapsed; content.Children.Add(details);
+        details.Visibility = Visibility.Collapsed; content.Children.Add(details); content.Children.Add(processView);
         OverviewTheme.PlotMenu(Usage, "%", "gpu-utilization"); OverviewTheme.PlotMenu(Memory, "MiB", "gpu-memory");
     }
     private static UIElement MetricRegion(string label, TelemetryPlot plot, UIElement value)
@@ -46,7 +55,7 @@ internal sealed class GpuOverviewCard : Border
         var valueHost = new Border { Child = value, Padding = new(10, 12, 0, 0), VerticalAlignment = VerticalAlignment.Top };
         Grid.SetColumn(valueHost, 1); row.Children.Add(valueHost); area.Children.Add(row); return area;
     }
-    public void Update(GpuReading gpu, ProviderSnapshot session, int minutes, DateTimeOffset now, bool showDetails)
+    public void Update(GpuReading gpu, ProviderSnapshot session, IReadOnlyList<ProviderSnapshot> sources, int minutes, DateTimeOffset now, bool showDetails)
     {
         title.Text = $"GPU {gpu.Index}"; model.Text = gpu.Name;
         static string Value(double? value, string unit) => value.HasValue ? $"{value:0.#}{unit}" : "N/A";
@@ -61,6 +70,7 @@ internal sealed class GpuOverviewCard : Border
         Memory.Update(new[] { session.Series(gpu.Id, "memory.used") }, now, minutes, 1024);
         details.Text = $"{gpu.Id} · PCI {gpu.Bus}\nGraphics {Value(gpu.Metrics["clocks.current.graphics"], " MHz")} · Memory {Value(gpu.Metrics["clocks.current.memory"], " MHz")}";
         details.Visibility = showDetails ? Visibility.Visible : Visibility.Collapsed;
+        processView.Update(gpu.Id, sources);
         Opacity = session.Health == ProviderHealth.Stale ? .5 : 1;
     }
 }

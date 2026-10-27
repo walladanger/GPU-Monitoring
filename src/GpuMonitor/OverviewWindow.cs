@@ -17,6 +17,7 @@ public sealed partial class OverviewWindow : Window
     private IReadOnlyList<ProviderSnapshot>? workspaceFixtures;
     private readonly Grid root;
     private readonly Dictionary<string, GpuOverviewCard> cards = [];
+    private readonly Dictionary<string, (Window Window, GpuOverviewCard Card)> gpuPopouts = [];
     private readonly Dictionary<string, string> deviceColors = [];
     private int nextColor;
     private readonly WrapPanel gpuGrid = new();
@@ -205,16 +206,25 @@ public sealed partial class OverviewWindow : Window
         var session = snapshots.Single(s => s.Source == NvidiaTelemetry.SourceId);
         var readings = session.Current == null ? Array.Empty<GpuReading>() : NvidiaSnapshot.Readings(session.Current).ToArray();
         var ids = readings.Select(g => g.Id).ToHashSet();
-        foreach (var id in cards.Keys.Where(id => !ids.Contains(id)).ToArray()) { gpuGrid.Children.Remove(cards[id]); cards.Remove(id); deviceColors.Remove(id); }
+        foreach (var id in cards.Keys.Where(id => !ids.Contains(id)).ToArray())
+        {
+            if (gpuPopouts.TryGetValue(id, out var popped)) popped.Window.Close();
+            gpuGrid.Children.Remove(cards[id]); cards.Remove(id); deviceColors.Remove(id);
+        }
         foreach (var gpu in readings)
         {
             if (!cards.TryGetValue(gpu.Id, out var card))
             {
                 deviceColors[gpu.Id] = Colors[nextColor++ % Colors.Length];
                 cards[gpu.Id] = card = new(); gpuGrid.Children.Add(card);
+                string gpuId = gpu.Id;
+                card.OpenWindowRequested += () => OpenGpuWindow(gpuId);
+                card.SelectRequested += () => customWorkspace.OpenPicker(gpuId);
                 foreach (var plot in card.Plots) plot.CursorMoved += SetCursor;
             }
-            card.Update(gpu, session, settings.WindowMinutes, now, details);
+            card.Update(gpu, session, snapshots, settings.WindowMinutes, now, details);
+            if (gpuPopouts.TryGetValue(gpu.Id, out var popped))
+                popped.Card.Update(gpu, session, snapshots, settings.WindowMinutes, now, details);
         }
         // Reorder existing visuals to match the current display indices without changing UUID history.
         for (int i = 0; i < readings.Length; i++)
@@ -246,6 +256,29 @@ public sealed partial class OverviewWindow : Window
         customWorkspace.Refresh(snapshots, now, settings.WindowMinutes);
         Reflow();
     }
+    private void OpenGpuWindow(string gpuId)
+    {
+        if (gpuPopouts.TryGetValue(gpuId, out var old)) { old.Window.Activate(); return; }
+        var card = new GpuOverviewCard();
+        card.SelectRequested += () => customWorkspace.OpenPicker(gpuId);
+        var window = new Window
+        {
+            Title = "GPU Monitor · GPU details",
+            Width = 800, Height = 730, MinWidth = 390, MinHeight = 330,
+            Background = OverviewTheme.Canvas, Foreground = Brushes.White,
+            FontFamily = new FontFamily("Segoe UI"), ResizeMode = ResizeMode.CanResize,
+            Content = new ScrollViewer
+            { Content = card, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new(14) }
+        };
+        window.Closed += (_, _) => gpuPopouts.Remove(gpuId);
+        gpuPopouts.Add(gpuId, (window, card));
+        var sources = WorkspaceSources();
+        var source = sources.FirstOrDefault(s => s.Source == NvidiaTelemetry.SourceId);
+        var reading = source?.Current == null ? null : NvidiaSnapshot.Readings(source.Current).FirstOrDefault(g => g.Id == gpuId);
+        if (reading != null && source != null) card.Update(reading, source, sources, settings.WindowMinutes, viewTime, details);
+        window.Show();
+    }
+
     private void Reflow()
     {
         double width = gpuGrid.ActualWidth; if (width <= 0) return;
