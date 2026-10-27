@@ -14,6 +14,7 @@ internal sealed class WorkspaceChartCard : Border
     private TelemetryPlot? plot;
     private string? axisKey;
     private WorkspacePanel? previewSize;
+    private double? detachedPlotHeight;
     private static readonly string[] Colors = ["#33DF32", "#2B82F8", "#A66CF2", "#FFBA4D", "#39BCD2", "#E977BD"];
     public WorkspacePanel Specification { get; }
     public TelemetryPlot? Plot => plot;
@@ -65,7 +66,7 @@ internal sealed class WorkspaceChartCard : Border
         {
             if (plot != null) content.Children.Remove(plot);
             axisKey = nextAxisKey;
-            plot = new(data.Axes[0].DisplayUnit, data.Axes[0].Maximum) { Height = Math.Max(160, (previewSize?.HeightRows ?? Specification.HeightRows) * 100) };
+            plot = new(data.Axes[0].DisplayUnit, data.Axes[0].Maximum) { Height = detachedPlotHeight ?? Math.Max(160, (previewSize?.HeightRows ?? Specification.HeightRows) * 100) };
             plot.SetSeries(data.Series.Select((s, i) => (s.Name, Colors[i % Colors.Length])).ToArray(), Specification.Chart == "area");
             plot.ConfigureAxes(data.Axes, data.Series.Select(s => s.Selection.Axis).ToArray());
             plot.CursorMoved += time => CursorMoved?.Invoke(time);
@@ -87,6 +88,13 @@ internal sealed class WorkspaceChartCard : Border
     }
 
     internal bool ProcessExpanded { get => processView.IsExpanded; set => processView.IsExpanded = value; }
+
+    internal void FitDetached(double width, double height)
+    {
+        Width = Math.Max(280, width - 56);
+        detachedPlotHeight = Math.Max(160, height - 270);
+        if (plot != null) plot.Height = detachedPlotHeight.Value;
+    }
 
     internal void PreviewSize(WorkspacePanel? dimensions)
     {

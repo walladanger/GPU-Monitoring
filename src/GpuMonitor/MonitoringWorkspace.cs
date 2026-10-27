@@ -113,12 +113,17 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         var card = MakeCard(panel);
         var window = new Window
         {
-            Title = panel.Title + " · GPU Monitor",
+            Owner = Window.GetWindow(this), Title = panel.Title + " · GPU Monitor",
             Width = 820, Height = 540, MinWidth = 340, MinHeight = 260,
             Background = OverviewTheme.Canvas, Foreground = Brushes.White,
             FontFamily = new FontFamily("Segoe UI"), ResizeMode = ResizeMode.CanResize,
             Content = new ScrollViewer
             { Content = card, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new(14) }
+        };
+        window.SizeChanged += (_, _) =>
+        {
+            if (popouts.TryGetValue(id, out var active))
+                active.Card.FitDetached(window.ActualWidth, window.ActualHeight);
         };
         window.Closed += (_, _) => popouts.Remove(id);
         popouts.Add(id, (window, card));
