@@ -153,7 +153,8 @@ public sealed partial class OverviewWindow : Window
         void Add(string glyph, string label, Action action, bool selected)
         {
             var button = OverviewTheme.Command(label, action); button.ToolTip = label; button.Margin = new(8, 4, 8, 4); button.Height = 48; button.HorizontalContentAlignment = HorizontalAlignment.Left;
-            button.Background = selected ? OverviewTheme.Gradient("#1E5892", "#134578") : Brushes.Transparent; button.BorderThickness = new(0);
+            button.Background = Brushes.Transparent; button.BorderThickness = new(0);
+            if (selected) button.SetResourceReference(Control.BackgroundProperty, "ActionSelection");
             var row = new StackPanel { Orientation = Orientation.Horizontal };
             var icon = OverviewTheme.Text(glyph, 18, selected ? Brushes.White : OverviewTheme.Muted); icon.FontFamily = new("Segoe MDL2 Assets"); row.Children.Add(icon);
             if (!collapsed) { var text = OverviewTheme.Text(label); text.Margin = new(14, 0, 0, 0); row.Children.Add(text); }

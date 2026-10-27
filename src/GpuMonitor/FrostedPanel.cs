@@ -48,8 +48,18 @@ public sealed class FrostedPanel : Border
             // before their first render, including areas beyond the owner window.
             if (Backdrop is { IsLoaded: true } source) {
                 var origin = source.PointFromScreen(PointToScreen(new Point(-Halo, -Halo)));
-                backdrop.Fill = new VisualBrush(source) { ViewboxUnits = BrushMappingMode.Absolute,
+                var sample = new VisualBrush(source) { ViewboxUnits = BrushMappingMode.Absolute,
                     Viewbox = new Rect(origin, new Size(width, height)), Stretch = Stretch.Fill };
+                // Composite onto an opaque base before blurring: transparent areas in
+                // the chart visual must not let the original sharp graph leak through.
+                var drawing = new DrawingVisual();
+                using (var context = drawing.RenderOpen()) {
+                    var bounds = new Rect(0, 0, width, height);
+                    context.DrawRectangle(OverviewTheme.Brush("#10212D"), null, bounds);
+                    context.DrawRectangle(sample, null, bounds);
+                }
+                var image = new RenderTargetBitmap((int)Math.Ceiling(width), (int)Math.Ceiling(height), 96, 96, PixelFormats.Pbgra32);
+                image.Render(drawing); image.Freeze(); backdrop.Fill = new ImageBrush(image) { Stretch = Stretch.Fill };
             } else if (backdrop.Fill == null) {
                 var dpi = VisualTreeHelper.GetDpi(this);
                 var origin = PointToScreen(new Point(-Halo, -Halo));

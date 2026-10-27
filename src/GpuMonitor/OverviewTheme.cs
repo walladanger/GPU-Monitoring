@@ -92,6 +92,7 @@ internal static class OverviewTheme
         if (resources == null) return;
         var color = (Color)ColorConverter.ConvertFromString(hex);
         resources["ActionAccent"] = new SolidColorBrush(color);
+        resources["ActionSelection"] = new SolidColorBrush(color) { Opacity = .24 };
         resources["ActionGlow"] = new System.Windows.Media.Effects.DropShadowEffect
             { Color = color, BlurRadius = 5, ShadowDepth = 0, Opacity = .38 };
     }
@@ -192,8 +193,8 @@ internal static class OverviewTheme
    </Popup>
   </Grid>
   <ControlTemplate.Triggers>
-   <Trigger Property='IsHighlighted' Value='True'><Setter TargetName='Highlight' Property='Background' Value='#705080A0'/></Trigger>
-   <Trigger Property='IsChecked' Value='True'><Setter TargetName='Check' Property='Visibility' Value='Visible'/></Trigger>
+   <Trigger Property='IsHighlighted' Value='True'><Setter TargetName='Highlight' Property='Background' Value='{DynamicResource ActionSelection}'/><Setter TargetName='Highlight' Property='BorderBrush' Value='{DynamicResource ActionAccent}'/><Setter TargetName='Highlight' Property='BorderThickness' Value='1'/><Setter TargetName='Highlight' Property='Effect' Value='{DynamicResource ActionGlow}'/></Trigger>
+   <Trigger Property='IsChecked' Value='True'><Setter TargetName='Check' Property='Visibility' Value='Visible'/><Setter TargetName='Highlight' Property='BorderBrush' Value='{DynamicResource ActionAccent}'/><Setter TargetName='Highlight' Property='BorderThickness' Value='1'/><Setter TargetName='Highlight' Property='Effect' Value='{DynamicResource ActionGlow}'/></Trigger>
    <Trigger Property='HasItems' Value='True'><Setter TargetName='Arrow' Property='Visibility' Value='Visible'/></Trigger>
    <Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.45'/></Trigger>
   </ControlTemplate.Triggers>

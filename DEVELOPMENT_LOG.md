@@ -35,3 +35,13 @@ Left-click now selects the nearest measured point within a 16-pixel radius, high
 Settings and other action menus, submenus, tooltips and the sensor editor use the rounded translucent treatment. Surface resize handles occupy the very outer corner and right/bottom edges; GPU graphs expand with the surface rather than leaving empty space. Detached windows remain independently movable native windows and share the same collectors.
 
 Validation: 262 telemetry regression checks; native panel tests for eight distinct units, correct lane selection, pinned-sample persistence, deselection, frosted detail and menu surfaces, visible zoom controls, outer-edge resize geometry, live resizing/cancellation, shared detached view updates, settings persistence and process unavailable states. Existing workspace and chart interaction suites pass. Physical multi-monitor and DPI transitions remain a manual verification item.
+
+## 2026-10-27 — Windows actions and chart-local navigation
+
+Replaced the main window's traffic-light buttons with labeled Minimize, Maximize/Restore and Close actions at the top right. Panel Options/Open and the navigation Menu now have visible labels. Shared command buttons and selected menu items use a subtle five-pixel accent glow; Settings offers persisted accent colors that update the existing controls immediately.
+
+Removed cross-chart cursor broadcasting. Hover and pinned inspection belong to the targeted graph, including detached views, with the normal arrow pointer and no graph-wide help tooltip. The information panel composites an opaque sampled chart backdrop before blur so sharp underlying traces cannot leak through transparent areas; text stays sharp.
+
+Added a wrapping toolbar above each plot with labeled zoom, pan, pause/resume and live-reset controls. The readout shows zoom percentage, visible duration, exact start/end times and live/paused mode. Plot hit testing and scales use the chart's dimensions below the toolbar. Zoom/pan clears stale pinned details; raw data and exports remain unchanged.
+
+Validation: Release build, 262 telemetry regression checks, native panel and chart checks, and overview fixtures from 760 to 2480 DIPs pass. Regression checks include narrow toolbar geometry, local hover cleanup, zoom readouts, selection after layout changes, and dynamic accent glow. NuGet vulnerability lookup was unavailable during the build (NU1900); compilation succeeded. The telemetry suite needed normal Windows performance-counter access. Existing unrelated working-tree edits were preserved. This updates the repository build, not an installed or already-running copy.

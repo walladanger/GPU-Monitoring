@@ -70,7 +70,7 @@ public sealed partial class TelemetryPlot
         bool visiblePoint = series[point.Series].IsVisible && location.X >= 4 && location.X <= chart.ActualWidth - 4;
         selectedMarker.Visibility = visiblePoint ? Visibility.Visible : Visibility.Collapsed;
         Canvas.SetLeft(selectedMarker, location.X - 6); Canvas.SetTop(selectedMarker, location.Y - 6);
-        inspection.Text = $"Selected · {ReadingName(point.Series)}\n{point.Sample.Time.ToLocalTime():yyyy-MM-dd HH:mm:ss.fff}\n{point.Sample.Value / SeriesDivisor(point.Series):0.###}{SeriesUnit(point.Series)}\nClick again, outside the graph, or Escape to deselect";
+        inspection.Text = $"Selected · {ReadingName(point.Series)}\n{point.Sample.Time.ToLocalTime():yyyy-MM-dd HH:mm:ss.fff}\n{point.Sample.Value / SeriesDivisor(point.Series):R}{SeriesUnit(point.Series)}\nClick again, outside the graph, or Escape to deselect";
         detailPanel.Visibility = Visibility.Visible; detailPanel.RefreshBackdrop();
     }
     internal Point VerificationSamplePosition(int index, TelemetrySample sample) => SamplePosition(index, sample);

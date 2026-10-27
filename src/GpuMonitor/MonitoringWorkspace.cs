@@ -137,7 +137,6 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         time = now; minutes = windowMinutes;
         foreach (var card in cards.Values) card.Refresh(snapshots, now, windowMinutes);
     }
-    public void SetCursor(DateTimeOffset? value) { foreach (var plot in Plots) plot.SetCursor(value); }
     private void Reflow()
     {
         double width = panels.ActualWidth; if (width <= 0) return;
