@@ -69,6 +69,7 @@ WorkspaceActionChecks.Run(Check);
 await SystemCollectorChecks.Run(Check);
 await CpuCoreChecks.Run(Check);
 await ProcessCollectorChecks.Run(Check);
+GpuProcessProjectionChecks.Run(Check);
 await RuntimeMetricsChecks.Run(Check);
 await RuntimeTransportChecks.Run(Check);
 await MetadataFeedChecks.Run(Check);
