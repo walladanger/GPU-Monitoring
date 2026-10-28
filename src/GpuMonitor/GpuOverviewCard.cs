@@ -9,14 +9,16 @@ internal sealed class GpuOverviewCard : Border
     private readonly TextBlock title = OverviewTheme.Text("", 18), model = OverviewTheme.Text("", 13, OverviewTheme.Muted);
     private readonly TextBlock power = OverviewTheme.Text("N/A", 15), temp = OverviewTheme.Text("N/A", 15), fan = OverviewTheme.Text("N/A", 15);
     private readonly TextBlock details = OverviewTheme.Text("", 12, OverviewTheme.Muted);
+    // A GPU overview surface starts with one configurable chart. Its Options menu
+    // can switch to memory or add other sensors without creating a second window.
     public TelemetryPlot Usage { get; } = new("%", 100) { Height = 128 };
-    public TelemetryPlot Memory { get; } = new(" GiB") { Height = 128 };
-    public IEnumerable<TelemetryPlot> Plots => new[] { Usage, Memory };
+    public IEnumerable<TelemetryPlot> Plots => [Usage];
 
-    private readonly GpuSensorPanel usagePanel, memoryPanel;
-    internal void ResizePlots(double? height) { usagePanel.SetViewHeight(height.HasValue ? Math.Max(100, (height.Value - 150) / 2) : null); memoryPanel.SetViewHeight(height.HasValue ? Math.Max(100, (height.Value - 150) / 2) : null); }
-    public void CloseDetached() { usagePanel.CloseDetached(); memoryPanel.CloseDetached(); }
-    public GpuOverviewCard(GpuPanelSettings? usageSettings = null, GpuPanelSettings? memorySettings = null, Action? save = null)
+    private readonly GpuSensorPanel sensorPanel;
+    internal void ResizePlots(double? height) =>
+        sensorPanel.SetViewHeight(height.HasValue ? Math.Max(100, height.Value - 110) : null);
+    public void CloseDetached() => sensorPanel.CloseDetached();
+    public GpuOverviewCard(GpuPanelSettings? sensorSettings = null, Action? save = null)
     {
         Background = OverviewTheme.Surface; BorderBrush = OverviewTheme.Border; BorderThickness = new(1);
         CornerRadius = new(9); Padding = new(16); Margin = new(0, 0, 14, 14);
@@ -25,10 +27,8 @@ internal sealed class GpuOverviewCard : Border
         var heading = new DockPanel { Margin = new(0, 0, 0, 12) };
         var dot = OverviewTheme.Text("●", 16, OverviewTheme.Green); dot.Margin = new(0, 0, 8, 0); heading.Children.Add(dot);
         DockPanel.SetDock(model, Dock.Right); heading.Children.Add(model); heading.Children.Add(title); content.Children.Add(heading);
-        usagePanel = new(Usage, usageSettings ?? new(), save ?? (() => {}));
-        content.Children.Add(usagePanel);
-        memoryPanel = new(Memory, memorySettings ?? new() { Sensor = "memory.used" }, save ?? (() => {}));
-        content.Children.Add(memoryPanel);
+        sensorPanel = new(Usage, sensorSettings ?? new(), save ?? (() => {}));
+        content.Children.Add(sensorPanel);
         var footer = new System.Windows.Controls.Primitives.UniformGrid { Columns = 3, Margin = new(0, 6, 0, 0) };
         foreach (var pair in new[] { ("Power", power), ("Core temperature", temp), ("Fan", fan) })
         {
@@ -37,15 +37,14 @@ internal sealed class GpuOverviewCard : Border
         }
         content.Children.Add(footer); details.Margin = new(0, 12, 0, 0); details.TextWrapping = TextWrapping.Wrap;
         details.Visibility = Visibility.Collapsed; content.Children.Add(details);
-        OverviewTheme.PlotMenu(Usage, "%", "gpu-utilization"); OverviewTheme.PlotMenu(Memory, "MiB", "gpu-memory");
+        OverviewTheme.PlotMenu(Usage, "%", "gpu-utilization");
     }
     public void Update(GpuReading gpu, ProviderSnapshot session, int minutes, DateTimeOffset now, bool showDetails, IReadOnlyList<ProviderSnapshot>? sources = null)
     {
         title.Text = $"GPU {gpu.Index}"; model.Text = gpu.Name;
         static string Value(double? value, string unit) => value.HasValue ? $"{value:0.#}{unit}" : "N/A";
         power.Text = Value(gpu.Metrics["power.draw"], " W"); temp.Text = Value(gpu.Metrics["temperature.gpu"], " °C"); fan.Text = Value(gpu.Metrics["fan.speed"], "%");
-        usagePanel.Update(gpu, session, sources ?? [], now);
-        memoryPanel.Update(gpu, session, sources ?? [], now);
+        sensorPanel.Update(gpu, session, sources ?? [], now);
         details.Text = $"{gpu.Id} · PCI {gpu.Bus}\nGraphics {Value(gpu.Metrics["clocks.current.graphics"], " MHz")} · Memory {Value(gpu.Metrics["clocks.current.memory"], " MHz")}";
         details.Visibility = showDetails ? Visibility.Visible : Visibility.Collapsed;
         Opacity = session.Health == ProviderHealth.Stale ? .5 : 1;
