@@ -76,11 +76,14 @@ internal static class OverviewChecks
                     if (window.VerificationHardwarePlots.Any(p => p.VisibleSamples.Count != 31))
                         throw new InvalidOperationException("Reference hardware row must render its actual fixture samples.");
                 }
+                // One graph per GPU, including the empty and multi-GPU layouts.
+                var plots = window.VerifyPlots;
+                if (plots.Count != count)
+                    throw new InvalidOperationException($"Expected {count} default GPU charts; found {plots.Count}.");
                 // Inspect chart interiors, excluding all card headings and numeric labels.
                 if (count > 0)
                 {
-                    var plots = window.VerifyPlots;
-                    for (int chartIndex = 0; chartIndex < 2; chartIndex++)
+                    for (int chartIndex = 0; chartIndex < Math.Min(2, plots.Count); chartIndex++)
                     {
                         var plot = plots[chartIndex];
                         var origin = plot.TranslatePoint(new Point(0, 0), viewport);
@@ -91,9 +94,8 @@ internal static class OverviewChecks
                             for (int x = (int)origin.X + 54; x < Math.Min(bitmap.PixelWidth, origin.X + plotWidth - 16); x++)
                         {
                             int p = y * stride + x * 4;
-                            bool matches = chartIndex == 0 ?
-                                pixels[p + 1] > 140 && pixels[p + 1] > pixels[p] * 1.5 && pixels[p + 1] > pixels[p + 2] * 1.5 :
-                                pixels[p] > 140 && pixels[p] > pixels[p + 2] * 1.5 && pixels[p] > pixels[p + 1] * 1.2;
+                            bool matches = pixels[p + 1] > 140 &&
+                                pixels[p + 1] > pixels[p] * 1.5 && pixels[p + 1] > pixels[p + 2] * 1.5;
                             if (matches) colored++;
                         }
                         if (colored < 20) throw new InvalidOperationException($"Native chart {chartIndex} strokes missing: {colored} pixels.");
@@ -102,7 +104,7 @@ internal static class OverviewChecks
                 index++;
                 if (index == cases.Length)
                 {
-                    timer.Stop(); File.WriteAllText(Path.Combine(output, "result.txt"), "PASS: 0/1/2/3/4/8 GPU native overview inventory, exact comparison-series counts, colored chart rendering, saved widths and filled panel rows from 760 to 2480 DIPs. Fixtures are synthetic; no physical GPU validation.");
+                    timer.Stop(); File.WriteAllText(Path.Combine(output, "result.txt"), "PASS: 0/1/2/3/4/8 GPU native overview inventory, exact comparison-series counts, single-chart GPU panels, colored chart rendering, saved widths and filled panel rows from 760 to 2480 DIPs. Fixtures are synthetic; no physical GPU validation.");
                     window.Close(); return;
                 }
                 ApplyCase();
