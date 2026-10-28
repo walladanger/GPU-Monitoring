@@ -67,11 +67,15 @@ internal static class OverviewChecks
                     if (window.VerificationHardwarePlots.Any(p => p.VisibleSamples.Count != 31))
                         throw new InvalidOperationException("Reference hardware row must render its actual fixture samples.");
                 }
+                // Each GPU panel defaults to exactly one visible chart (utilization).
+                var visiblePlots = window.VerifyPlots.Where(p => p.Visibility == Visibility.Visible).ToArray();
+                if (visiblePlots.Length != count)
+                    throw new InvalidOperationException($"Expected one visible chart per GPU panel, found {visiblePlots.Length} for {count} GPUs.");
                 // Inspect chart interiors, excluding all card headings and numeric labels.
                 if (count > 0)
                 {
-                    var plots = window.VerifyPlots;
-                    for (int chartIndex = 0; chartIndex < 2; chartIndex++)
+                    var plots = visiblePlots;
+                    for (int chartIndex = 0; chartIndex < Math.Min(2, plots.Length); chartIndex++)
                     {
                         var plot = plots[chartIndex];
                         var origin = plot.TranslatePoint(new Point(0, 0), viewport);
@@ -82,9 +86,7 @@ internal static class OverviewChecks
                             for (int x = (int)origin.X + 54; x < Math.Min(bitmap.PixelWidth, origin.X + plotWidth - 16); x++)
                         {
                             int p = y * stride + x * 4;
-                            bool matches = chartIndex == 0 ?
-                                pixels[p + 1] > 140 && pixels[p + 1] > pixels[p] * 1.5 && pixels[p + 1] > pixels[p + 2] * 1.5 :
-                                pixels[p] > 140 && pixels[p] > pixels[p + 2] * 1.5 && pixels[p] > pixels[p + 1] * 1.2;
+                            bool matches = pixels[p + 1] > 140 && pixels[p + 1] > pixels[p] * 1.5 && pixels[p + 1] > pixels[p + 2] * 1.5;
                             if (matches) colored++;
                         }
                         if (colored < 20) throw new InvalidOperationException($"Native chart {chartIndex} strokes missing: {colored} pixels.");
