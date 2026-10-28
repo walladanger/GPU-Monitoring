@@ -16,6 +16,14 @@ internal static class OverviewChecks
         var app = new Application();
         var preferences = new Settings { GpuPanels = new() { ["surface/GPU-fixture-0"] = new() { SurfaceWidth = 430 }, ["surface/GPU-fixture-1"] = new() { SurfaceWidth = 600 } } };
         var window = new OverviewWindow(startMonitoring: false, preferences: preferences) { Left = 0, Top = 0 };
+        // Preserve the customizable panel UI, but default to exactly one graph per GPU.
+        var configured = new GpuPanelSettings();
+        var card = new GpuOverviewCard(configured);
+        if (card.Plots.Count() != 1 || configured.Sensor != "utilization.gpu")
+            throw new InvalidOperationException("The GPU panel default must show one configurable utilization graph.");
+        var memoryConfiguration = new GpuPanelSettings { Sensor = "memory.used" };
+        if (new GpuOverviewCard(memoryConfiguration).Plots.Count() != 1 || memoryConfiguration.Sensor != "memory.used")
+            throw new InvalidOperationException("Selecting memory data must replace, not duplicate, the GPU graph.");
         var viewportRoot = window.VerificationRoot; window.Content = null;
         HwndSource? host = null;
         var cases = new[] { (0, 1536), (1, 1536), (2, 1536), (4, 1536), (8, 1536), (2, 760), (3, 1200), (3, 1800), (3, 2480) };
