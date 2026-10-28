@@ -239,7 +239,10 @@ public sealed partial class OverviewWindow : Window
                     if (!settings.GpuPanels.TryGetValue(id, out var value)) settings.GpuPanels[id] = value = new() { Sensor = sensor, Minutes = settings.WindowMinutes };
                     return value;
                 }
-                cards[gpu.Id] = card = new(Panel("usage", "utilization.gpu"), Panel("memory", "memory.used"), Save); gpuSurfaces[gpu.Id] = Surface("GPU " + gpu.Index, card, gpu.Id, [new(NvidiaTelemetry.SourceId, gpu.Id, "utilization.gpu"), new(NvidiaTelemetry.SourceId, gpu.Id, "memory.used", 1)]); gpuGrid.Children.Add(gpuSurfaces[gpu.Id]);
+                cards[gpu.Id] = card = new(Panel("usage", "utilization.gpu"), Save);
+                gpuSurfaces[gpu.Id] = Surface("GPU " + gpu.Index, card, gpu.Id,
+                    [new(NvidiaTelemetry.SourceId, gpu.Id, "utilization.gpu")]);
+                gpuGrid.Children.Add(gpuSurfaces[gpu.Id]);
             }
             card.Update(gpu, session, settings.WindowMinutes, now, details, snapshots);
         }
