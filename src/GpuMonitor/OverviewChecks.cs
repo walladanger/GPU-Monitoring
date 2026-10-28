@@ -15,6 +15,16 @@ internal static class OverviewChecks
         var output = Path.Combine(AppContext.BaseDirectory, "overview-verification"); Directory.CreateDirectory(output);
         var app = new Application();
         var window = new OverviewWindow(startMonitoring: false) { Left = 0, Top = 0 };
+        // Changing the panel's selected sensor must not add a second visible data window.
+        var selectionCard = new GpuOverviewCard();
+        if (selectionCard.Usage.Visibility != Visibility.Visible || selectionCard.Memory.Visibility != Visibility.Collapsed)
+            throw new InvalidOperationException("GPU panel must default to its single utilization chart.");
+        selectionCard.SelectGraph(true);
+        if (selectionCard.Usage.Visibility != Visibility.Collapsed || selectionCard.Memory.Visibility != Visibility.Visible)
+            throw new InvalidOperationException("GPU panel memory selection did not replace the visible chart.");
+        selectionCard.SelectGraph(false);
+        if (selectionCard.Usage.Visibility != Visibility.Visible || selectionCard.Memory.Visibility != Visibility.Collapsed)
+            throw new InvalidOperationException("GPU panel did not restore the single utilization chart.");
         var viewportRoot = window.VerificationRoot; window.Content = null;
         HwndSource? host = null;
         var cases = new[] { (0, 1536), (1, 1536), (2, 1536), (4, 1536), (8, 1536), (2, 760) };
