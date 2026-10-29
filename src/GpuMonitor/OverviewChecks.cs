@@ -15,6 +15,16 @@ internal static class OverviewChecks
         var output = Path.Combine(AppContext.BaseDirectory, "overview-verification"); Directory.CreateDirectory(output);
         var app = new Application();
         var window = new OverviewWindow(startMonitoring: false) { Left = 0, Top = 0 };
+        // Changing the panel's selected sensor must not add a second visible data window.
+        var selectionCard = new GpuOverviewCard();
+        if (selectionCard.Usage.Visibility != Visibility.Visible || selectionCard.Memory.Visibility != Visibility.Collapsed)
+            throw new InvalidOperationException("GPU panel must default to its single utilization chart.");
+        selectionCard.SelectGraph(true);
+        if (selectionCard.Usage.Visibility != Visibility.Collapsed || selectionCard.Memory.Visibility != Visibility.Visible)
+            throw new InvalidOperationException("GPU panel memory selection did not replace the visible chart.");
+        selectionCard.SelectGraph(false);
+        if (selectionCard.Usage.Visibility != Visibility.Visible || selectionCard.Memory.Visibility != Visibility.Collapsed)
+            throw new InvalidOperationException("GPU panel did not restore the single utilization chart.");
         var viewportRoot = window.VerificationRoot; window.Content = null;
         HwndSource? host = null;
         var cases = new[] { (0, 1536), (1, 1536), (2, 1536), (4, 1536), (8, 1536), (2, 760) };
@@ -67,11 +77,15 @@ internal static class OverviewChecks
                     if (window.VerificationHardwarePlots.Any(p => p.VisibleSamples.Count != 31))
                         throw new InvalidOperationException("Reference hardware row must render its actual fixture samples.");
                 }
+                // Each GPU panel defaults to exactly one visible chart (utilization).
+                var visiblePlots = window.VerifyPlots.Where(p => p.Visibility == Visibility.Visible).ToArray();
+                if (visiblePlots.Length != count)
+                    throw new InvalidOperationException($"Expected one visible chart per GPU panel, found {visiblePlots.Length} for {count} GPUs.");
                 // Inspect chart interiors, excluding all card headings and numeric labels.
                 if (count > 0)
                 {
-                    var plots = window.VerifyPlots;
-                    for (int chartIndex = 0; chartIndex < 2; chartIndex++)
+                    var plots = visiblePlots;
+                    for (int chartIndex = 0; chartIndex < Math.Min(2, plots.Length); chartIndex++)
                     {
                         var plot = plots[chartIndex];
                         var origin = plot.TranslatePoint(new Point(0, 0), viewport);
@@ -82,9 +96,7 @@ internal static class OverviewChecks
                             for (int x = (int)origin.X + 54; x < Math.Min(bitmap.PixelWidth, origin.X + plotWidth - 16); x++)
                         {
                             int p = y * stride + x * 4;
-                            bool matches = chartIndex == 0 ?
-                                pixels[p + 1] > 140 && pixels[p + 1] > pixels[p] * 1.5 && pixels[p + 1] > pixels[p + 2] * 1.5 :
-                                pixels[p] > 140 && pixels[p] > pixels[p + 2] * 1.5 && pixels[p] > pixels[p + 1] * 1.2;
+                            bool matches = pixels[p + 1] > 140 && pixels[p + 1] > pixels[p] * 1.5 && pixels[p + 1] > pixels[p + 2] * 1.5;
                             if (matches) colored++;
                         }
                         if (colored < 20) throw new InvalidOperationException($"Native chart {chartIndex} strokes missing: {colored} pixels.");
