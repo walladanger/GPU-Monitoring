@@ -1,0 +1,13 @@
+Microsoft.Data.Sqlite and Microsoft.Data.Sqlite.Core 10.0.13
+MIT license; copyright (c) .NET Foundation and Contributors.
+NuGet metadata also states copyright Microsoft Corporation. All rights reserved.
+Full upstream license: Microsoft.Data.Sqlite.txt.
+Source: https://github.com/dotnet/dotnet/tree/4099f83977f4d29604a9aeb971fb0a7bc1d5f699/src/efcore
+
+SQLitePCLRaw.core, SQLitePCLRaw.provider.e_sqlite3,
+SQLitePCLRaw.bundle_e_sqlite3 and SQLitePCLRaw.lib.e_sqlite3 2.1.13
+Apache License 2.0; copyright 2014-2024 SourceGear, LLC (package metadata).
+Full license: SQLitePCL.raw.txt.
+Source: https://github.com/ericsink/SQLitePCL.raw
+Unmodified NuGet binaries are bundled, including the native SQLite library.
+SQLite itself is public-domain software: https://sqlite.org/copyright.html

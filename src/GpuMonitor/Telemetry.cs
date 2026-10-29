@@ -84,7 +84,7 @@ public sealed class NvidiaCollector : ITelemetryProvider
         NvidiaTelemetry.Normalize(await ReadAsync(cancellation));
 
     private readonly string executable = FindExecutable();
-    private static string FindExecutable()
+    internal static string FindExecutable()
     {
         var system = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "nvidia-smi.exe");
         var vendor = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "NVIDIA Corporation", "NVSMI", "nvidia-smi.exe");

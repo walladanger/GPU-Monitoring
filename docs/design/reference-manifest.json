@@ -1,0 +1,12 @@
+{
+  "gpu-monitor-v2-reference.png": {
+    "sha256": "e6da37a4c558e94247ae263fc2cd9af945a057bd2bcb19ce0cd8e1cbeb7cd8dc",
+    "width": 1536,
+    "height": 1024
+  },
+  "gpu-monitor-v2-annotations.jpg": {
+    "sha256": "26f9d4f3e85e748f5de7303b6a75a35c945041d55379484ba2b0e1fee9558b1c",
+    "width": 2047,
+    "height": 623
+  }
+}
