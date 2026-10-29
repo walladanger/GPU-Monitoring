@@ -14,6 +14,9 @@ internal sealed class GpuOverviewCard : Border
     private readonly GpuProcessView processView = new();
     public event Action? OpenWindowRequested;
     public event Action? SelectRequested;
+    private readonly TextBlock graphLabel = OverviewTheme.Text("GPU utilization", 13, OverviewTheme.Muted);
+    private readonly Button graphSelector;
+    private bool memorySelected;
     public TelemetryPlot Usage { get; } = new("%", 100) { Height = 128 };
     public TelemetryPlot Memory { get; } = new(" GiB") { Height = 128 };
     public IEnumerable<TelemetryPlot> Plots => new[] { Usage, Memory };
@@ -35,9 +38,21 @@ internal sealed class GpuOverviewCard : Border
         var open = OverviewTheme.Command("↗", () => OpenWindowRequested?.Invoke(), "Open GPU panel in new window");
         open.ToolTip = "Open GPU panel in new window"; open.Padding = new(7, 3, 7, 3); right.Children.Add(open);
         DockPanel.SetDock(right, Dock.Right); heading.Children.Add(right); heading.Children.Add(title); content.Children.Add(heading);
-        content.Children.Add(MetricRegion("Utilization", Usage, usageValue));
-        var memoryNumbers = new StackPanel(); memoryNumbers.Children.Add(memoryValue); memoryAmount.Margin = new(0, 5, 0, 0); memoryNumbers.Children.Add(memoryAmount);
-        content.Children.Add(MetricRegion("Memory", Memory, memoryNumbers));
+        graphSelector = OverviewTheme.Command("Select graph ▾", OpenGraphMenu, "Select the data graph in this panel");
+        graphSelector.Margin = new(0, 0, 0, 4);
+        var chartHeading = new DockPanel { Margin = new(0, 0, 0, 8) };
+        DockPanel.SetDock(graphSelector, Dock.Right); chartHeading.Children.Add(graphSelector);
+        chartHeading.Children.Add(graphLabel); content.Children.Add(chartHeading);
+        var chartHost = new Grid();
+        chartHost.Children.Add(Usage); chartHost.Children.Add(Memory);
+        Memory.Visibility = Visibility.Collapsed;
+        content.Children.Add(chartHost);
+        var memoryNumbers = new StackPanel(); memoryNumbers.Children.Add(memoryValue);
+        memoryAmount.Margin = new(0, 5, 0, 0); memoryNumbers.Children.Add(memoryAmount);
+        var metrics = new System.Windows.Controls.Primitives.UniformGrid { Columns = 2, Margin = new(0, 10, 0, 4) };
+        metrics.Children.Add(SummaryMetric("Utilization", usageValue));
+        metrics.Children.Add(SummaryMetric("Memory", memoryNumbers));
+        content.Children.Add(metrics);
         var footer = new System.Windows.Controls.Primitives.UniformGrid { Columns = 3, Margin = new(0, 6, 0, 0) };
         foreach (var pair in new[] { ("Power", power), ("Core temperature", temp), ("Fan", fan) })
         {
@@ -48,14 +63,30 @@ internal sealed class GpuOverviewCard : Border
         details.Visibility = Visibility.Collapsed; content.Children.Add(details); content.Children.Add(processView);
         OverviewTheme.PlotMenu(Usage, "%", "gpu-utilization"); OverviewTheme.PlotMenu(Memory, "MiB", "gpu-memory");
     }
-    private static UIElement MetricRegion(string label, TelemetryPlot plot, UIElement value)
+    private static UIElement SummaryMetric(string label, UIElement value)
     {
-        var area = new StackPanel { Margin = new(0, 0, 0, 8) };
-        area.Children.Add(OverviewTheme.Text(label, 13, OverviewTheme.Muted));
-        var row = new Grid(); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = new(90) });
-        row.Children.Add(plot);
-        var valueHost = new Border { Child = value, Padding = new(10, 12, 0, 0), VerticalAlignment = VerticalAlignment.Top };
-        Grid.SetColumn(valueHost, 1); row.Children.Add(valueHost); area.Children.Add(row); return area;
+        var area = new StackPanel { Margin = new(0, 0, 8, 0) };
+        area.Children.Add(OverviewTheme.Text(label, 12, OverviewTheme.Muted));
+        area.Children.Add(value);
+        return area;
+    }
+
+    private void OpenGraphMenu()
+    {
+        var menu = OverviewTheme.Menu();
+        var utilization = OverviewTheme.MenuCommand("GPU utilization", () => SelectGraph(false));
+        utilization.IsCheckable = true; utilization.IsChecked = !memorySelected; menu.Items.Add(utilization);
+        var memory = OverviewTheme.MenuCommand("GPU memory", () => SelectGraph(true));
+        memory.IsCheckable = true; memory.IsChecked = memorySelected; menu.Items.Add(memory);
+        menu.PlacementTarget = graphSelector; menu.IsOpen = true;
+    }
+
+    internal void SelectGraph(bool memory)
+    {
+        memorySelected = memory;
+        Usage.Visibility = memory ? Visibility.Collapsed : Visibility.Visible;
+        Memory.Visibility = memory ? Visibility.Visible : Visibility.Collapsed;
+        graphLabel.Text = memory ? "GPU memory" : "GPU utilization";
     }
     public void Update(GpuReading gpu, ProviderSnapshot session, IReadOnlyList<ProviderSnapshot> sources, int minutes, DateTimeOffset now, bool showDetails)
     {
