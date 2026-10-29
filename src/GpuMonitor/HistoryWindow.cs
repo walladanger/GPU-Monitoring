@@ -38,7 +38,6 @@ internal sealed class HistoryWindow : Window
         root.Children.Add(plot); status.TextWrapping = TextWrapping.Wrap; root.Children.Add(status);
         root.Children.Add(OverviewTheme.Text("Right-click the loaded chart to export PNG or its displayed raw CSV/JSON. At most 10,000 newest samples are loaded per query. Missing devices retain their recorded identity.", 12, OverviewTheme.Muted));
         root.Children.Add(OverviewTheme.Command("Close", Close));
-        plot.CursorMoved += plot.SetCursor;
         Loaded += async (_, _) => await RefreshCatalogAsync(); Closed += (_, _) => closed = true;
     }
     internal async Task RefreshCatalogAsync()

@@ -71,7 +71,7 @@ internal static class ChartInteractionChecks
                 Require(scaleLabels.Any(l => l.Text.Contains('%') && !double.IsNaN(Canvas.GetLeft(l))) &&
                     scaleLabels.Any(l => l.Text.Contains("GiB") && !double.IsNaN(Canvas.GetRight(l))), "Inside left/right unit labels are absent.");
                 plot.SetCursor(now);
-                Require(plot.Children.OfType<TextBlock>().Any(t => t.Text.Contains("33") && t.Text.Contains("15.5") && t.Text.Contains("GiB")), "Crosshair inspection lost independently converted exact values.");
+                Require(plot.InspectionText.Contains("33") && plot.InspectionText.Contains("15.5") && plot.InspectionText.Contains("GiB"), "Crosshair inspection lost independently converted values.");
                 plot.SetCursor(null); plot.SavePng(Path.Combine(output, "chart-dual-axis.png"));
                 var bitmap = new BitmapImage(new Uri(Path.Combine(output, "chart-dual-axis.png")));
                 Require(bitmap.PixelWidth >= 1100 && bitmap.PixelHeight == 400, "PNG export did not capture the rendered chart bounds.");
