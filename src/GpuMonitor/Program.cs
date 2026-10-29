@@ -42,17 +42,26 @@ public static class Program
                         throw new ArgumentException("Missing value for " + name);
                     return args[index + 1];
                 }
-                using var llama = args.Contains("--llama-metrics") ? new RuntimeMetricsCollector(RuntimeMetricsKind.LlamaCpp,
-                    new Uri(Value("--llama-metrics"), UriKind.Absolute)) : null;
-                using var vllm = args.Contains("--vllm-metrics") ? new RuntimeMetricsCollector(RuntimeMetricsKind.Vllm,
-                    new Uri(Value("--vllm-metrics"), UriKind.Absolute)) : null;
+                using var llama = args.Contains("--llama-metrics") ? RuntimeMetricsCollector.CreateLlamaCpp("llamacpp-cli",
+                    LocalEndpoint(Value("--llama-metrics"))) : null;
+                using var vllm = args.Contains("--vllm-metrics") ? RuntimeMetricsCollector.CreateVllm("vllm-cli",
+                    LocalEndpoint(Value("--vllm-metrics"))) : null;
                 var runtimes = new List<ITelemetryProvider>();
                 if (llama != null) runtimes.Add(llama);
                 if (vllm != null) runtimes.Add(vllm);
+                static Uri LocalEndpoint(string value)
+                {
+                    var endpoint = new Uri(value, UriKind.Absolute);
+                    if (endpoint.Scheme is not ("http" or "https") || !endpoint.IsLoopback ||
+                        endpoint.AbsolutePath != "/metrics" || endpoint.UserInfo.Length != 0 ||
+                        endpoint.Query.Length != 0 || endpoint.Fragment.Length != 0)
+                        throw new ArgumentException("Use a loopback HTTP(S) /metrics URL without credentials, query or fragment.");
+                    return endpoint;
+                }
                 Environment.ExitCode = HeadlessCollector.RunAsync(Value("--collect"),
                     int.Parse(Value("--duration", "30"), System.Globalization.CultureInfo.InvariantCulture),
                     int.Parse(Value("--interval", "2"), System.Globalization.CultureInfo.InvariantCulture),
-                    additionalProviders: runtimes).GetAwaiter().GetResult();
+                    configuration: args.Contains("--sources") ? CollectorConfiguration.Load(Value("--sources")) : null, additionalProviders: runtimes).GetAwaiter().GetResult();
             }
             catch (Exception error)
             {

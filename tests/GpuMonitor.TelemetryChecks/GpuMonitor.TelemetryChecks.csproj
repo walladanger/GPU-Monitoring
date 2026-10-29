@@ -6,7 +6,15 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/GpuMonitor/CollectorConfiguration.cs" Link="CollectorConfiguration.cs" />
+    <Compile Include="../../src/GpuMonitor/OtlpMetadataDecoder.cs" Link="OtlpMetadataDecoder.cs" />
+    <Compile Include="../../src/GpuMonitor/JsonlTelemetryProvider.cs" Link="JsonlTelemetryProvider.cs" />
+    <Compile Include="../../src/GpuMonitor/AgentEventDecoder.cs" Link="AgentEventDecoder.cs" />
+    <Compile Include="../../src/GpuMonitor/UsageMetadataDecoder.cs" Link="UsageMetadataDecoder.cs" />
     <Compile Include="../../src/GpuMonitor/RuntimeMetricsCollector.cs" Link="RuntimeMetricsCollector.cs" />
+    <Compile Include="../../src/GpuMonitor/PrometheusText.cs" Link="PrometheusText.cs" />
+    <Compile Include="../../src/GpuMonitor/ProcessCollectors.cs" Link="ProcessCollectors.cs" />
+    <Compile Include="../../src/GpuMonitor/DiskCollector.cs" Link="DiskCollector.cs" />
     <Compile Include="../../src/GpuMonitor/SystemCollectors.cs" Link="SystemCollectors.cs" />
     <Compile Include="../../src/GpuMonitor/HeadlessCollector.cs" Link="HeadlessCollector.cs" />
     <Compile Include="../../src/GpuMonitor/TelemetryEngine.cs" Link="TelemetryEngine.cs" />

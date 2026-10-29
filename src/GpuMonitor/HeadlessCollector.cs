@@ -10,15 +10,13 @@ public static class HeadlessCollector
 {
     /// <summary>Finite, window-free collection with bounded histories and local exports.</summary>
     public static async Task<int> RunAsync(string directory, int durationSeconds, int intervalSeconds,
-        CancellationToken cancellation = default, IEnumerable<ITelemetryProvider>? additionalProviders = null)
+        CancellationToken cancellation = default, CollectorConfiguration? configuration = null, IEnumerable<ITelemetryProvider>? additionalProviders = null)
     {
         if (durationSeconds is < 1 or > 86400) throw new ArgumentOutOfRangeException(nameof(durationSeconds));
         if (intervalSeconds is < 1 or > 10) throw new ArgumentOutOfRangeException(nameof(intervalSeconds));
         Directory.CreateDirectory(directory);
-        var providers = new List<ITelemetryProvider> { new NvidiaCollector(), new WindowsSystemCollector(),
-            new NetworkCollector(), new VolumeCollector() };
-        if (additionalProviders != null) providers.AddRange(additionalProviders);
-        var engine = new TelemetryEngine(providers);
+        using var providers = BackendProviderSet.Create(configuration);
+        var engine = new TelemetryEngine(providers.Providers.Concat(additionalProviders ?? []).ToArray());
         using var duration = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         duration.CancelAfter(TimeSpan.FromSeconds(durationSeconds));
         try { await engine.RunAsync(TimeSpan.FromSeconds(intervalSeconds), duration.Token); }
@@ -42,6 +40,23 @@ public static class HeadlessCollector
                 .Append(sample.Time.ToString("O", CultureInfo.InvariantCulture)).Append(',')
                 .Append(sample.Value?.ToString("R", CultureInfo.InvariantCulture) ?? "").Append("\r\n");
         await WriteAsync(Path.Combine(directory, "telemetry.csv"), csv.ToString(), cancellation);
+        var eventsCsv = new StringBuilder("source,event_id,kind,time_utc,device_id,correlation_id,parent_id,activity_id,duration_ms,timestamp_estimated,name,metric,unit,value\r\n");
+        foreach (var activity in snapshot.SelectMany(s => s.EventHistory).OrderBy(e => e.Time))
+        {
+            IEnumerable<EventMeasurement?> measurements = activity.Measurements?.Count > 0
+                ? activity.Measurements.Select(m => (EventMeasurement?)m) : Enumerable.Repeat<EventMeasurement?>(null, 1);
+            foreach (var measurement in measurements)
+            {
+                eventsCsv.Append(Quote(activity.Source)).Append(',').Append(Quote(activity.Id)).Append(',').Append(Quote(activity.Kind)).Append(',')
+                    .Append(activity.Time.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)).Append(',')
+                    .Append(Quote(activity.DeviceId ?? "")).Append(',').Append(Quote(activity.CorrelationId ?? "")).Append(',')
+                    .Append(Quote(activity.ParentId ?? "")).Append(',').Append(Quote(activity.ActivityId ?? "")).Append(',').Append(activity.Duration?.TotalMilliseconds.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                    .Append(activity.TimestampEstimated ? "true" : "false").Append(',').Append(Quote(activity.Name ?? "")).Append(',')
+                    .Append(Quote(measurement?.MetricKey ?? "")).Append(',').Append(Quote(measurement?.Unit ?? "")).Append(',')
+                    .Append(measurement?.Value.ToString("R", CultureInfo.InvariantCulture)).Append("\r\n");
+            }
+        }
+        await WriteAsync(Path.Combine(directory, "events.csv"), eventsCsv.ToString(), cancellation);
         var report = new StringBuilder("GPU Monitor collection report\n");
         foreach (var source in snapshot)
         {

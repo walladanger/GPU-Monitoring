@@ -1,0 +1,13 @@
+{
+  "Version": 1,
+  "CollectProcesses": true,
+  "Runtimes": [
+    { "Enabled": false, "Id": "sglang-local", "Kind": "sglang", "Endpoint": "http://127.0.0.1:30000/metrics" },
+    { "Enabled": false, "Id": "vllm-local", "Kind": "vllm", "Endpoint": "http://127.0.0.1:8000/metrics" }
+  ],
+  "Feeds": [
+    { "Enabled": false, "Id": "agents", "Kind": "agui", "Path": "D:\\DEBUGGING LOGS\\GpuMonitor\\agent-events.jsonl" },
+    { "Enabled": false, "Id": "tokens", "Kind": "usage", "Path": "D:\\DEBUGGING LOGS\\GpuMonitor\\usage.jsonl" },
+    { "Enabled": false, "Id": "otel", "Kind": "otlp", "Path": "D:\\DEBUGGING LOGS\\GpuMonitor\\otel.jsonl" }
+  ]
+}

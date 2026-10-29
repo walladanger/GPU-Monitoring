@@ -1,173 +1,156 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
-using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace GpuMonitor;
 
-public enum RuntimeMetricsKind { LlamaCpp, Vllm }
+public sealed record RuntimeMetricMap(string Name, string Key, string Title, string Unit, double Multiplier = 1, bool Counter = false);
 
-/// <summary>Explicit local Prometheus endpoint; never sends inference requests or stores labels.</summary>
-public sealed class RuntimeMetricsCollector : ITelemetryProvider, IDisposable
+/// <summary>Optional, bounded, read-only scrape. No inference requests or prompt capture.</summary>
+public sealed class RuntimeMetricsCollector : ITelemetryProvider, IDisposable, ITelemetryHistoryPolicy
 {
-    private const int MaximumBytes = 1024 * 1024;
-    private readonly HttpClient client;
-    private readonly bool ownsClient;
-    private readonly Uri endpoint;
-    private readonly RuntimeMetricsReader reader;
+    public static Uri DefaultSglangEndpoint { get; } = new("http://127.0.0.1:30000/metrics");
+    public static Uri DefaultVllmEndpoint { get; } = new("http://127.0.0.1:8000/metrics");
+    public static Uri DefaultLlamaCppEndpoint { get; } = new("http://127.0.0.1:8080/metrics");
+    public static RuntimeMetricsCollector CreateLlamaCpp(string id = "llamacpp-local", Uri? endpoint = null) =>
+        new(id, endpoint ?? DefaultLlamaCppEndpoint, StandardMaps("llamacpp"));
+    public static RuntimeMetricsCollector CreateSglang(string id = "sglang-local", Uri? endpoint = null) =>
+        new(id, endpoint ?? DefaultSglangEndpoint, StandardMaps("sglang"));
+    public static RuntimeMetricsCollector CreateVllm(string id = "vllm-local", Uri? endpoint = null) =>
+        new(id, endpoint ?? DefaultVllmEndpoint, StandardMaps("vllm"));
     public string SourceId { get; }
-    public IReadOnlyList<MetricDefinition> Definitions => reader.Definitions;
+    public int HistoryCapacity => 900;
+    public TimeSpan HistoryRetention => TimeSpan.FromMinutes(30);
+    public IReadOnlyList<MetricDefinition> Definitions { get; }
+    private readonly Uri endpoint;
+    private readonly HttpClient client;
+    private readonly IReadOnlyList<RuntimeMetricMap> maps;
+    private readonly IReadOnlyList<MetricDefinition> derivedMeans;
+    private readonly Dictionary<string, CumulativeRate> rates = [];
 
-    public RuntimeMetricsCollector(RuntimeMetricsKind kind, Uri endpoint) : this(kind, endpoint, null) { }
-
-    internal RuntimeMetricsCollector(RuntimeMetricsKind kind, Uri endpoint, HttpClient? client)
+    public RuntimeMetricsCollector(string id, Uri endpoint, IReadOnlyList<RuntimeMetricMap> maps, HttpMessageHandler? handler = null)
     {
-        if (!endpoint.IsAbsoluteUri || endpoint.Scheme is not ("http" or "https") ||
-            !(endpoint.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-              (IPAddress.TryParse(endpoint.DnsSafeHost, out var ip) && IPAddress.IsLoopback(ip))) ||
-            endpoint.AbsolutePath != "/metrics" || endpoint.UserInfo.Length != 0 ||
-            endpoint.Query.Length != 0 || endpoint.Fragment.Length != 0)
-            throw new ArgumentException("Use an explicit loopback HTTP(S) /metrics URL without credentials, query or fragment.", nameof(endpoint));
-        this.endpoint = endpoint;
-        SourceId = $"llm:{kind}:{endpoint.AbsoluteUri}";
-        reader = new(kind, SourceId);
-        ownsClient = client == null;
-        this.client = client ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false });
+        if (string.IsNullOrWhiteSpace(id) || id.Length > 64) throw new ArgumentException("Runtime source ID must be 1–64 characters.");
+        if (!endpoint.IsAbsoluteUri || endpoint.Scheme is not ("http" or "https") || endpoint.UserInfo.Length != 0 || endpoint.Fragment.Length != 0 || endpoint.Query.Length != 0)
+            throw new ArgumentException("Metrics endpoint must be HTTP(S), without embedded credentials or fragment.");
+        if (maps.Count is < 1 or > 64 || maps.Select(m => m.Name).Distinct().Count() != maps.Count ||
+            maps.Any(m => string.IsNullOrWhiteSpace(m.Name) || string.IsNullOrWhiteSpace(m.Key) || string.IsNullOrWhiteSpace(m.Title) || string.IsNullOrWhiteSpace(m.Unit) || !double.IsFinite(m.Multiplier) || m.Multiplier <= 0) ||
+            maps.GroupBy(m => m.Key).Any(g => g.Select(m => (m.Unit, m.Counter)).Distinct().Count() > 1) ||
+            maps.Any(m => m.Counter && maps.Any(other => other.Key == m.Key + ".rate")))
+            throw new ArgumentException("Invalid runtime metric mapping.");
+        SourceId = "runtime:" + id; this.endpoint = endpoint; this.maps = maps.ToArray();
+        client = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, UseProxy = false })
+            { Timeout = TimeSpan.FromSeconds(3), MaxResponseContentBufferSize = 4 * 1024 * 1024 };
+        derivedMeans = new[] { "ttft", "request", "decode", "inter_token" }.Where(k => maps.Any(m => m.Key == "latency." + k + ".sum") && maps.Any(m => m.Key == "latency." + k + ".count") && !maps.Any(m => m.Key == "latency." + k + ".mean"))
+            .Select(k => new MetricDefinition(SourceId, "latency." + k + ".mean", "Interval mean " + k + " latency", "s")).ToArray();
+        Definitions = Array.AsReadOnly(maps.Select(m => new MetricDefinition(SourceId, m.Key, m.Title, m.Unit))
+            .Concat(maps.Where(m => m.Counter).Select(m => new MetricDefinition(SourceId, m.Key + ".rate", m.Title + " rate", m.Unit + "/s")))
+            .Concat(derivedMeans)
+            .DistinctBy(d => d.Key).ToArray());
     }
 
     public async Task<TelemetryBatch> ReadAsync(CancellationToken cancellation)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        timeout.CancelAfter(TimeSpan.FromSeconds(5));
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
-            request.Headers.Accept.ParseAdd("text/plain; version=0.0.4");
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-            if (!response.IsSuccessStatusCode) throw new IOException($"Runtime metrics returned HTTP {(int)response.StatusCode}.");
-            if (response.Content.Headers.ContentLength > MaximumBytes) throw new IOException("Runtime metrics response exceeds 1 MiB.");
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation); timeout.CancelAfter(TimeSpan.FromSeconds(3));
+            using var response = await client.GetAsync(endpoint, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            if (!response.IsSuccessStatusCode) throw new IOException("Metrics endpoint returned HTTP " + (int)response.StatusCode + ".");
+            if (response.Content.Headers.ContentLength > 4 * 1024 * 1024) throw new IOException("Metrics response exceeds limit.");
             await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
-            using var bytes = new MemoryStream();
-            var buffer = new byte[8192];
-            int count;
+            using var memory = new MemoryStream(); var buffer = new byte[8192]; int count;
             while ((count = await stream.ReadAsync(buffer, timeout.Token)) != 0)
             {
-                if (bytes.Length + count > MaximumBytes) throw new IOException("Runtime metrics response exceeds 1 MiB.");
-                bytes.Write(buffer, 0, count);
+                if (memory.Length + count > 4 * 1024 * 1024) throw new IOException("Metrics response exceeds limit.");
+                memory.Write(buffer, 0, count);
             }
-            return reader.Observe(Encoding.UTF8.GetString(bytes.ToArray()), DateTimeOffset.UtcNow, Stopwatch.GetTimestamp());
+            return Normalize(Encoding.UTF8.GetString(memory.ToArray()), DateTimeOffset.UtcNow, Stopwatch.GetTimestamp());
         }
-        catch
-        {
-            // Do not average a recovered sample across a failed scrape interval.
-            reader.Reset();
-            throw;
-        }
+        catch { rates.Clear(); throw; } // Recovery begins with a gap, not an average over an outage.
     }
 
-    public void Dispose() { if (ownsClient) client.Dispose(); }
-}
-
-/// <summary>Fixed allowlist and endpoint-wide additive totals; labels are used only for counter continuity.</summary>
-internal sealed class RuntimeMetricsReader
-{
-    private readonly string source;
-    private readonly string name;
-    private readonly string[] families;
-    private Dictionary<string, Dictionary<string, double?>>? previous;
-    private long previousTick;
-    public IReadOnlyList<MetricDefinition> Definitions { get; }
-    private static readonly Regex Line = new(
-        "^(?<name>[a-zA-Z_:][a-zA-Z0-9_:]*)(?:\\{(?<labels>(?:[^\"{}]|\"(?:[^\"\\\\]|\\\\.)*\")*)\\})?[ \\t]+(?<value>[^ \\t]+)(?:[ \\t]+[+-]?[0-9]+)?[ \\t]*$",
-        RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
-    private static readonly Regex Label = new(
-        "\\G[ \\t]*(?<key>[a-zA-Z_][a-zA-Z0-9_]*)[ \\t]*=[ \\t]*\"(?<value>(?:[^\"\\\\]|\\\\[\\\\\"n])*)\"[ \\t]*(?:,|$)",
-        RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
-
-    public RuntimeMetricsReader(RuntimeMetricsKind kind, string source)
+    internal TelemetryBatch Normalize(string text, DateTimeOffset now, long monotonicTick)
     {
-        this.source = source;
-        name = kind switch { RuntimeMetricsKind.LlamaCpp => "llama.cpp", RuntimeMetricsKind.Vllm => "vLLM", _ => throw new ArgumentOutOfRangeException(nameof(kind)) };
-        families = kind == RuntimeMetricsKind.LlamaCpp
-            ? ["llamacpp:tokens_predicted_total", "llamacpp:prompt_tokens_total", "llamacpp:requests_processing", "llamacpp:requests_deferred"]
-            : ["vllm:generation_tokens_total", "vllm:prompt_tokens_total", "vllm:num_requests_running", "vllm:num_requests_waiting"];
-        Definitions = Array.AsReadOnly(new MetricDefinition[] {
-            new(source, "llm.generation.total", "Generated tokens (runtime total)", "tokens"),
-            new(source, "llm.generation.rate", "Generation rate (scrape interval)", "tokens/s"),
-            new(source, "llm.prompt.total", "Prompt tokens (runtime total)", "tokens"),
-            new(source, "llm.prompt.rate", "Prompt rate (scrape interval)", "tokens/s"),
-            new(source, "llm.requests.running", "Running requests", "requests"),
-            new(source, "llm.requests.waiting", "Waiting requests", "requests") });
-    }
-
-    public void Reset() { previous = null; }
-
-    public TelemetryBatch Observe(string text, DateTimeOffset time, long tick)
-    {
-        var current = new Dictionary<string, Dictionary<string, double?>>(StringComparer.Ordinal);
-        foreach (var raw in text.Split('\n'))
+        var points = PrometheusText.Parse(text).Where(p => maps.Any(m => m.Name == p.Name)).ToArray();
+        var groups = points.GroupBy(p => PrometheusText.Canonical(p.Labels)).ToArray();
+        if (groups.Length > 32) throw new FormatException("Runtime series cardinality exceeds 32 label sets.");
+        if (points.Length == 0) throw new FormatException("Endpoint contains no configured runtime metrics.");
+        var devices = new List<DeviceIdentity>(); var samples = new List<TelemetrySample>(); var active = new HashSet<string>();
+        foreach (var group in groups)
         {
-            var line = raw.Trim();
-            if (line.Length == 0 || line.StartsWith('#')) continue;
-            // Ignore all non-allowlisted families, including arbitrary metadata and histograms.
-            int end = line.IndexOfAny(['{', ' ', '\t']);
-            if (end < 0 && families.Contains(line, StringComparer.Ordinal))
-                throw new FormatException("Missing supported runtime metric value.");
-            if (end < 0 || !families.Contains(line[..end], StringComparer.Ordinal)) continue;
-            var match = Line.Match(line);
-            if (!match.Success) throw new FormatException("Malformed supported runtime metric.");
-            string family = match.Groups["name"].Value;
-            string labels = CanonicalLabels(match.Groups["labels"].Value);
-            double? value = double.TryParse(match.Groups["value"].Value, NumberStyles.Float,
-                CultureInfo.InvariantCulture, out var parsed) && double.IsFinite(parsed) && parsed >= 0 ? parsed : null;
-            if (!current.TryGetValue(family, out var series)) current[family] = series = new(StringComparer.Ordinal);
-            if (!series.TryAdd(labels, value)) throw new FormatException("Duplicate runtime metric series.");
-        }
-        if (current.Count == 0) throw new FormatException("No supported runtime metrics. Enable the runtime metrics endpoint.");
-        double? Total(int i)
-        {
-            if (!current.TryGetValue(families[i], out var values) || values.Values.Any(v => v == null)) return null;
-            double total = values.Values.Sum(v => v!.Value);
-            return double.IsFinite(total) ? total : null;
-        }
-        double? Rate(int i)
-        {
-            string family = families[i];
-            if (previous == null || tick <= previousTick || !current.TryGetValue(family, out var values) ||
-                !previous.TryGetValue(family, out var old) || values.Count != old.Count) return null;
-            double delta = 0;
-            foreach (var pair in values)
+            var labels = group.First().Labels;
+            string id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(group.Key)));
+            string name = labels.TryGetValue("model_name", out var model) ? model : "Runtime";
+            if (name.Length > 256) name = name[..256];
+            var device = new DeviceIdentity(SourceId, id, DeviceKind.Runtime, name, devices.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            devices.Add(device);
+            var groupValues = new Dictionary<string, double?>();
+            foreach (var definition in maps.DistinctBy(m => m.Key))
             {
-                if (pair.Value == null || !old.TryGetValue(pair.Key, out var value) || value == null || pair.Value < value) return null;
-                delta += pair.Value.Value - value.Value;
+                // Ordered aliases support current and earlier cache metric names without double counting.
+                var map = maps.FirstOrDefault(m => m.Key == definition.Key && group.Any(p => p.Name == m.Name)) ?? definition;
+                var point = group.FirstOrDefault(p => p.Name == map.Name);
+                double? value = point?.Value * map.Multiplier;
+                if (value < 0 || (map.Unit == "%" && value > 100) || (value.HasValue && !double.IsFinite(value.Value))) value = null;
+                var timestamp = point?.TimestampMilliseconds is { } milliseconds ? DateTimeOffset.FromUnixTimeMilliseconds(milliseconds) : now;
+                samples.Add(new(device, map.Key, timestamp, value));
+                if (map.Counter)
+                {
+                    bool sourceTime = point?.TimestampMilliseconds != null;
+                    string rateKey = id + "/" + map.Key + (sourceTime ? "/source" : "/observed");
+                    active.Add(rateKey);
+                    if (!rates.TryGetValue(rateKey, out var rate)) rates[rateKey] = rate = new(sourceTime ? TimeSpan.TicksPerSecond : Stopwatch.Frequency);
+                    var measuredRate = rate.Observe(value, sourceTime ? timestamp.UtcTicks : monotonicTick);
+                    groupValues[map.Key + ".rate"] = measuredRate;
+                    samples.Add(new(device, map.Key + ".rate", timestamp, measuredRate));
+                }
             }
-            double rate = delta / ((tick - (double)previousTick) / Stopwatch.Frequency);
-            return double.IsFinite(rate) ? rate : null;
+            foreach (var definition in derivedMeans)
+            {
+                string prefix = definition.Key[..^5];
+                groupValues.TryGetValue(prefix + ".sum.rate", out var sum);
+                groupValues.TryGetValue(prefix + ".count.rate", out var count);
+                samples.Add(new(device, definition.Key, now, count > 0 ? sum / count : null));
+            }
         }
-        double?[] numbers = [Total(0), Rate(0), Total(1), Rate(1), Total(2), Total(3)];
-        previous = current; previousTick = tick;
-        var device = new DeviceIdentity(source, "runtime-total", DeviceKind.Runtime, name + " endpoint total", "0");
-        var samples = Definitions.Select((definition, i) => new TelemetrySample(device, definition.Key, time, numbers[i])).ToList();
-        return WindowsSystemCollector.Batch([device], samples);
+        foreach (var key in rates.Keys.Except(active).ToArray()) rates.Remove(key);
+        return WindowsSystemCollector.Batch(devices.AsReadOnly(), samples);
     }
 
-    private static string CanonicalLabels(string text)
+    public static IReadOnlyList<RuntimeMetricMap> StandardMaps(string runtime)
     {
-        var labels = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        int position = 0;
-        while (position < text.Length)
-        {
-            if (string.IsNullOrWhiteSpace(text[position..])) break;
-            var match = Label.Match(text, position);
-            if (!match.Success) throw new FormatException("Malformed runtime metric labels.");
-            if (!labels.TryAdd(match.Groups["key"].Value, match.Groups["value"].Value))
-                throw new FormatException("Duplicate runtime metric label.");
-            position += match.Length;
-        }
-        return JsonSerializer.Serialize(labels);
+        // Keep llama.cpp on the shared transport/rate implementation. Its exporter does not
+        // provide the SGLang/vLLM cache ratios or request latency histograms mapped below.
+        if (runtime == "llamacpp") return Array.AsReadOnly(new RuntimeMetricMap[] {
+            new("llamacpp:prompt_tokens_total", "tokens.prompt", "Prompt tokens", "tokens", Counter: true),
+            new("llamacpp:tokens_predicted_total", "tokens.output", "Output tokens", "tokens", Counter: true),
+            new("llamacpp:requests_processing", "requests.running", "Running requests", "count"),
+            new("llamacpp:requests_deferred", "requests.waiting", "Waiting requests", "count") });
+        if (runtime is not ("sglang" or "vllm")) throw new ArgumentException("Unknown runtime kind.");
+        string prefix = runtime + ":";
+        var result = new List<RuntimeMetricMap> {
+            new(prefix + "prompt_tokens_total", "tokens.prompt", "Prompt tokens", "tokens", Counter: true),
+            new(prefix + "generation_tokens_total", "tokens.output", "Output tokens", "tokens", Counter: true),
+            new(prefix + (runtime == "sglang" ? "num_running_reqs" : "num_requests_running"), "requests.running", "Running requests", "count"),
+            new(prefix + (runtime == "sglang" ? "num_queue_reqs" : "num_requests_waiting"), "requests.waiting", "Waiting requests", "count"),
+            new(prefix + (runtime == "sglang" ? "token_usage" : "kv_cache_usage_perc"), "cache.usage", "KV cache usage", "%", 100),
+            new(prefix + (runtime == "sglang" ? "cache_hit_rate" : "gpu_cache_usage_perc"), runtime == "sglang" ? "cache.hit" : "cache.usage", runtime == "sglang" ? "Cache hit rate" : "KV cache usage", "%", 100),
+            new(prefix + "time_to_first_token_seconds_sum", "latency.ttft.sum", "TTFT cumulative duration", "s", Counter: true),
+            new(prefix + "time_to_first_token_seconds_count", "latency.ttft.count", "TTFT observations", "count", Counter: true),
+            new(prefix + "e2e_request_latency_seconds_sum", "latency.request.sum", "Request cumulative duration", "s", Counter: true),
+            new(prefix + "e2e_request_latency_seconds_count", "latency.request.count", "Request observations", "count", Counter: true),
+            new(prefix + "request_time_per_output_token_seconds_sum", "latency.decode.sum", "Decode cumulative duration", "s", Counter: true),
+            new(prefix + "request_time_per_output_token_seconds_count", "latency.decode.count", "Decode observations", "count", Counter: true),
+            new(prefix + "inter_token_latency_seconds_sum", "latency.inter_token.sum", "Inter-token cumulative duration", "s", Counter: true),
+            new(prefix + "inter_token_latency_seconds_count", "latency.inter_token.count", "Inter-token observations", "count", Counter: true)
+        };
+        if (runtime == "vllm") result.AddRange([
+            new(prefix + "time_per_output_token_seconds_sum", "latency.inter_token.sum", "Inter-token cumulative duration", "s", Counter: true),
+            new(prefix + "time_per_output_token_seconds_count", "latency.inter_token.count", "Inter-token observations", "count", Counter: true)
+        ]);
+        return result.AsReadOnly();
     }
+    public void Dispose() => client.Dispose();
 }

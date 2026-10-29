@@ -2,6 +2,8 @@
 
 The backend can now run without creating a WPF Application, dashboard, tray icon or UI mutex. GUI styling is unchanged by this branch.
 
+Disk/process collection and optional inference/agent/OTel adapters are now implemented. See [adapter setup and source contracts](GPU_MONITOR_V2_ADAPTERS.md) and [disabled-by-default configuration](backend-sources.example.json) for the current provider factory and four export files. The original three-file example below describes the first backend increment; `events.csv` is now additionally exported.
+
 ## Running without the GUI
 
 From PowerShell, wait for the Windows executable and inspect its exit status:
@@ -47,11 +49,11 @@ CPU usage uses GetSystemTimes (kernel includes idle), RAM uses GlobalMemoryStatu
 - https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-globalmemorystatusex
 - https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumenameforvolumemountpointw
 
+The opt-in --llama-metrics and --vllm-metrics flags use the shared runtime adapters and can accompany --sources configuration. See [runtime collection and mappings](GPU_MONITOR_V2_RUNTIME_METRICS.md).
+
 ## Remaining backend work
 
-Optional local llama.cpp/vLLM endpoint collectors are now available through explicit headless flags; see [runtime metric mappings and limits](GPU_MONITOR_V2_RUNTIME_METRICS.md). They add endpoint-wide token totals/rates and request queues to the same engine and exports.
-
-This increment does not complete all 15 phases. Physical-disk discovery/throughput/busy time, per-core samples, physical core topology, privileged temperature/fan sensors, GPU process attribution/NVML, persistent database history, and other LLM/agent/OTel adapters remain unimplemented. Logical volume capacity is not physical-disk activity. No UI, layout editing or additional chart families are implemented here.
+This does not complete all 15 phases. Per-core samples, physical core topology, privileged temperature/fan sensors, a direct NVML adapter, persistent database history and a dedicated private ForgeCore protocol remain outside this implementation. Disk throughput, readable system-process monitoring, NVIDIA compute-process VRAM and optional Prometheus/AG-UI/usage/OTel file adapters are implemented as documented in the adapter guide. Logical volume capacity is not physical-disk activity. No UI, layout editing or additional chart families are implemented here.
 
 ## Verification
 
