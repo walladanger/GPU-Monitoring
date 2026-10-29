@@ -58,6 +58,7 @@ public sealed class BackendProviderSet : IDisposable
                 var endpoint = string.IsNullOrWhiteSpace(source.Endpoint) ? null : new Uri(source.Endpoint, UriKind.Absolute);
                 result.providers.Add(source.Kind switch
                 {
+                    "llamacpp" => RuntimeMetricsCollector.CreateLlamaCpp(source.Id, endpoint),
                     "sglang" => RuntimeMetricsCollector.CreateSglang(source.Id, endpoint),
                     "vllm" => RuntimeMetricsCollector.CreateVllm(source.Id, endpoint),
                     "prometheus" => new RuntimeMetricsCollector(source.Id, endpoint ?? throw new FormatException("Custom metrics require an endpoint."), source.Metrics),

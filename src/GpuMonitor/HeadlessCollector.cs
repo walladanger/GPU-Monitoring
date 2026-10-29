@@ -10,13 +10,13 @@ public static class HeadlessCollector
 {
     /// <summary>Finite, window-free collection with bounded histories and local exports.</summary>
     public static async Task<int> RunAsync(string directory, int durationSeconds, int intervalSeconds,
-        CancellationToken cancellation = default, CollectorConfiguration? configuration = null)
+        CancellationToken cancellation = default, CollectorConfiguration? configuration = null, IEnumerable<ITelemetryProvider>? additionalProviders = null)
     {
         if (durationSeconds is < 1 or > 86400) throw new ArgumentOutOfRangeException(nameof(durationSeconds));
         if (intervalSeconds is < 1 or > 10) throw new ArgumentOutOfRangeException(nameof(intervalSeconds));
         Directory.CreateDirectory(directory);
         using var providers = BackendProviderSet.Create(configuration);
-        var engine = new TelemetryEngine(providers.Providers);
+        var engine = new TelemetryEngine(providers.Providers.Concat(additionalProviders ?? []).ToArray());
         using var duration = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         duration.CancelAfter(TimeSpan.FromSeconds(durationSeconds));
         try { await engine.RunAsync(TimeSpan.FromSeconds(intervalSeconds), duration.Token); }

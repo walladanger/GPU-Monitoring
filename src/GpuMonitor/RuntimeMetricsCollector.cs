@@ -13,6 +13,9 @@ public sealed class RuntimeMetricsCollector : ITelemetryProvider, IDisposable, I
 {
     public static Uri DefaultSglangEndpoint { get; } = new("http://127.0.0.1:30000/metrics");
     public static Uri DefaultVllmEndpoint { get; } = new("http://127.0.0.1:8000/metrics");
+    public static Uri DefaultLlamaCppEndpoint { get; } = new("http://127.0.0.1:8080/metrics");
+    public static RuntimeMetricsCollector CreateLlamaCpp(string id = "llamacpp-local", Uri? endpoint = null) =>
+        new(id, endpoint ?? DefaultLlamaCppEndpoint, StandardMaps("llamacpp"));
     public static RuntimeMetricsCollector CreateSglang(string id = "sglang-local", Uri? endpoint = null) =>
         new(id, endpoint ?? DefaultSglangEndpoint, StandardMaps("sglang"));
     public static RuntimeMetricsCollector CreateVllm(string id = "vllm-local", Uri? endpoint = null) =>
@@ -118,6 +121,13 @@ public sealed class RuntimeMetricsCollector : ITelemetryProvider, IDisposable, I
 
     public static IReadOnlyList<RuntimeMetricMap> StandardMaps(string runtime)
     {
+        // Keep llama.cpp on the shared transport/rate implementation. Its exporter does not
+        // provide the SGLang/vLLM cache ratios or request latency histograms mapped below.
+        if (runtime == "llamacpp") return Array.AsReadOnly(new RuntimeMetricMap[] {
+            new("llamacpp:prompt_tokens_total", "tokens.prompt", "Prompt tokens", "tokens", Counter: true),
+            new("llamacpp:tokens_predicted_total", "tokens.output", "Output tokens", "tokens", Counter: true),
+            new("llamacpp:requests_processing", "requests.running", "Running requests", "count"),
+            new("llamacpp:requests_deferred", "requests.waiting", "Waiting requests", "count") });
         if (runtime is not ("sglang" or "vllm")) throw new ArgumentException("Unknown runtime kind.");
         string prefix = runtime + ":";
         var result = new List<RuntimeMetricMap> {

@@ -73,6 +73,35 @@ jobs:
           if (-not (Test-Path (Join-Path $output 'events.csv'))) { throw 'Missing event/measurement CSV export' }
           if (-not (Test-Path (Join-Path $output 'telemetry.csv'))) { throw 'Missing CSV export' }
           Get-Content (Join-Path $output 'telemetry.txt')
+      - name: Verify optional runtime adapters through the Windows CLI
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $portFile = Join-Path $env:RUNNER_TEMP 'runtime-metrics-port.txt'
+          Remove-Item $portFile -ErrorAction SilentlyContinue
+          $server = Start-Process python -WindowStyle Hidden -ArgumentList @('tests/runtime_metrics_fixture.py', '--port-file', $portFile) -PassThru
+          try {
+            for ($attempt = 0; $attempt -lt 50 -and -not (Test-Path $portFile); $attempt++) { Start-Sleep -Milliseconds 100 }
+            if (-not (Test-Path $portFile)) { throw 'Runtime fixture did not start' }
+            $port = (Get-Content $portFile -Raw).Trim()
+            $endpoint = "http://127.0.0.1:$port/metrics"
+            $output = Join-Path $env:RUNNER_TEMP 'gpu-runtime-capture'
+            $process = Start-Process $exe -ArgumentList @('--collect', $output, '--duration', '6', '--interval', '1', '--llama-metrics', $endpoint, '--vllm-metrics', $endpoint) -PassThru
+            if (-not $process.WaitForExit(20000)) { $process.Kill(); throw 'Runtime collection shutdown timed out' }
+            if ($process.ExitCode -ne 0) { throw 'Runtime collection CLI failed' }
+            $sources = Get-Content (Join-Path $output 'telemetry.json') -Raw | ConvertFrom-Json
+            $runtimes = @($sources | Where-Object { $_.Source -like 'runtime:*-cli' })
+            if ($runtimes.Count -ne 2) { throw 'Missing optional runtime sources' }
+            foreach ($source in $runtimes) {
+              if ($source.Health -ne 'Live') { throw 'Runtime fixture source is not live' }
+              $rates = @($source.History | Where-Object { $_.MetricKey -eq 'tokens.output.rate' -and $_.Value -gt 0 })
+              if ($rates.Count -lt 1) { throw 'Missing derived runtime token rate' }
+              $queue = $source.Current.Samples | Where-Object MetricKey -eq 'requests.waiting'
+              if ($queue.Value -ne 2) { throw 'Wrong runtime queue value' }
+            }
+          } finally {
+            if (-not $server.HasExited) { $server.Kill(); $server.WaitForExit() }
+          }
       - name: Verify native overview charts and capture fixture screenshots
         shell: pwsh
         run: |

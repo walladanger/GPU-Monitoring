@@ -17,6 +17,15 @@ internal static class RuntimeMetricsChecks
         try { PrometheusText.Parse("test{a=\"b\"} 1\ntest{a=\"b\"} 2"); } catch (FormatException) { rejected = true; }
         check(rejected, "Duplicate Prometheus series cannot be double counted");
         var rate = new CumulativeRate(1);
+        long epochTick = DateTimeOffset.Parse("2026-10-24T12:00:00Z").UtcTicks;
+        bool preciseEpochRates = true;
+        for (int offset = 0; offset < 256; offset++)
+        {
+            var epochRate = new CumulativeRate(TimeSpan.TicksPerSecond);
+            epochRate.Observe(100, epochTick + offset);
+            preciseEpochRates &= Math.Abs(epochRate.Observe(120, epochTick + offset + TimeSpan.TicksPerSecond)!.Value - 20) < 1e-12;
+        }
+        check(preciseEpochRates, "Epoch-sized source timestamps retain exact elapsed ticks before rate conversion");
         check(rate.Observe(100, 1) == null && rate.Observe(140, 3) == 20 && rate.Observe(140, 3) == null &&
             rate.Observe(160, 4) == 20, "Counter rates ignore replayed timestamps without corrupting their baseline");
         check(rate.Observe(2, 5) == null && rate.Observe(12, 6) == 10 && rate.Observe(50, 7, "restart") == null,

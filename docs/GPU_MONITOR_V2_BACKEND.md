@@ -49,6 +49,8 @@ CPU usage uses GetSystemTimes (kernel includes idle), RAM uses GlobalMemoryStatu
 - https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-globalmemorystatusex
 - https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumenameforvolumemountpointw
 
+The opt-in --llama-metrics and --vllm-metrics flags use the shared runtime adapters and can accompany --sources configuration. See [runtime collection and mappings](GPU_MONITOR_V2_RUNTIME_METRICS.md).
+
 ## Remaining backend work
 
 This does not complete all 15 phases. Per-core samples, physical core topology, privileged temperature/fan sensors, a direct NVML adapter, persistent database history and a dedicated private ForgeCore protocol remain outside this implementation. Disk throughput, readable system-process monitoring, NVIDIA compute-process VRAM and optional Prometheus/AG-UI/usage/OTel file adapters are implemented as documented in the adapter guide. Logical volume capacity is not physical-disk activity. No UI, layout editing or additional chart families are implemented here.
