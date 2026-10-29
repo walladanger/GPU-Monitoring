@@ -16,6 +16,7 @@ namespace GpuMonitor;
 public sealed partial class TelemetryPlot : Grid
 {
     private readonly CartesianChart chart;
+    internal FrameworkElement VerificationChart => chart;
     private readonly Axis timeAxis;
     private readonly Axis valueAxis;
     private readonly List<LineSeries<ObservablePoint>> series = [];

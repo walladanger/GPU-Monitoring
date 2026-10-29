@@ -86,12 +86,15 @@ internal static class OverviewChecks
                     for (int chartIndex = 0; chartIndex < Math.Min(2, plots.Count); chartIndex++)
                     {
                         var plot = plots[chartIndex];
-                        var origin = plot.TranslatePoint(new Point(0, 0), viewport);
-                        int plotWidth = (int)plot.ActualWidth, plotHeight = (int)plot.ActualHeight;
-                        int stride = bitmap.PixelWidth * 4; var pixels = new byte[stride * bitmap.PixelHeight]; bitmap.CopyPixels(pixels, stride, 0);
+                        // Capture the native chart in its own coordinates. The wrapping
+                        // navigation toolbar and parent scroll offsets are outside its data area.
+                        var chartBitmap = Capture(plot.VerificationChart);
+                        int stride = chartBitmap.PixelWidth * 4;
+                        var pixels = new byte[stride * chartBitmap.PixelHeight];
+                        chartBitmap.CopyPixels(pixels, stride, 0);
                         int colored = 0;
-                        for (int y = (int)origin.Y + 16; y < Math.Min(bitmap.PixelHeight, origin.Y + plotHeight - 32); y++)
-                            for (int x = (int)origin.X + 54; x < Math.Min(bitmap.PixelWidth, origin.X + plotWidth - 16); x++)
+                        for (int y = 16; y < chartBitmap.PixelHeight - 32; y++)
+                            for (int x = 54; x < chartBitmap.PixelWidth - 16; x++)
                         {
                             int p = y * stride + x * 4;
                             bool matches = pixels[p + 1] > 140 &&
