@@ -17,6 +17,8 @@ public sealed partial class OverviewWindow : Window
     private IReadOnlyList<ProviderSnapshot>? workspaceFixtures;
     private readonly Grid root;
     private readonly Dictionary<string, GpuOverviewCard> cards = [];
+    private readonly Dictionary<string, (Window Window, GpuOverviewCard Card)> gpuPopouts = [];
+    private readonly Dictionary<bool, (Window Window, HardwareOverviewCard Card)> hardwarePopouts = [];
     private readonly Dictionary<string, string> deviceColors = [];
     private int nextColor;
     private readonly WrapPanel gpuGrid = new();
@@ -27,6 +29,12 @@ public sealed partial class OverviewWindow : Window
     private readonly TextBlock empty = OverviewTheme.Text("Discovering NVIDIA GPUs…", 16, OverviewTheme.Muted);
     private readonly WrapPanel legend = new() { HorizontalAlignment = HorizontalAlignment.Center };
     private readonly TelemetryPlot comparison = new("%", 100) { Height = 148 };
+    private readonly GpuProcessView comparisonProcesses = new();
+    private (Window Window, TelemetryPlot Plot, GpuProcessView Processes)? comparisonPopout;
+    private bool comparisonAsArea;
+    private bool? detachedComparisonArea;
+    private string? comparisonProcessGpuId;
+    private readonly Button comparisonSelectButton;
     private readonly HardwareOverviewCard cpuCard = new(true), diskCard = new(false);
     private readonly WrapPanel hardwareRow = new();
     private readonly ScrollViewer scroll;
@@ -58,6 +66,8 @@ public sealed partial class OverviewWindow : Window
         Grid.SetColumn(scroll, 1); workspace.Children.Add(scroll);
         empty.Margin = new(0, 30, 0, 30); body.Children.Add(empty); body.Children.Add(gpuGrid);
         hardwareRow.Children.Add(cpuCard); hardwareRow.Children.Add(diskCard); body.Children.Add(hardwareRow);
+        cpuCard.OpenWindowRequested += () => OpenHardwareWindow(true);
+        diskCard.OpenWindowRequested += () => OpenHardwareWindow(false);
         cpuCard.Plot.CursorMoved += SetCursor; diskCard.Plot.CursorMoved += SetCursor;
         customWorkspace = new(WorkspaceSources, workspaceDirectory); customWorkspace.CursorMoved += SetCursor; body.Children.Add(customWorkspace);
         customWorkspace.LayoutChanged += () => customWorkspace.Visibility = customWorkspace.PanelCount > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -69,8 +79,19 @@ public sealed partial class OverviewWindow : Window
             var button = OverviewTheme.Command($"{minutes}m", () => { settings.WindowMinutes = minutes; Save(); Render(viewTime); });
             button.Padding = new(8, 3, 8, 3); button.FontSize = 11; button.Tag = minutes; rangeButtons.Add(button); ranges.Children.Add(button);
         }
+        comparisonSelectButton = OverviewTheme.Command("Select",
+            () => { if (comparisonSelectButton is { } target) OpenComparisonMenu(target, comparison); },
+            "Select comparison graph type and GPU sensors");
+        comparisonSelectButton.Padding = new(8, 3, 8, 3);
+        ranges.Children.Add(comparisonSelectButton);
+        var processButton = OverviewTheme.Command("P", comparisonProcesses.Toggle, "Show or hide GPU process details");
+        processButton.ToolTip = "Expand GPU processes"; processButton.Padding = new(8, 3, 8, 3);
+        ranges.Children.Add(processButton);
+        var popoutButton = OverviewTheme.Command("↗", OpenComparisonWindow, "Open GPU comparison in new window");
+        popoutButton.Padding = new(8, 3, 8, 3); popoutButton.ToolTip = "Open in new window";
+        ranges.Children.Add(popoutButton);
         comparisonHeading.Children.Add(OverviewTheme.Text("GPU Utilization (Selected GPUs)", 15)); comparisonContent.Children.Add(comparisonHeading);
-        comparisonContent.Children.Add(comparison); comparisonContent.Children.Add(legend);
+        comparisonContent.Children.Add(comparison); comparisonContent.Children.Add(legend); comparisonContent.Children.Add(comparisonProcesses);
         var compareCard = OverviewTheme.Card(comparisonContent); compareCard.Margin = new(0, 0, 14, 14); body.Children.Add(compareCard);
         OverviewTheme.PlotMenu(comparison, "%", "gpu-comparison"); comparison.CursorMoved += SetCursor;
         var footer = OverviewTheme.Text(!usesFixtureData ? "Read-only monitoring · Right-click any graph to inspect or export its source data" : "Synthetic fixture data · actual Windows app render · not live hardware readings", 11, OverviewTheme.Muted);
@@ -79,8 +100,8 @@ public sealed partial class OverviewWindow : Window
         timer.Interval = TimeSpan.FromSeconds(settings.RefreshSeconds); timer.Tick += (_, _) => Render(DateTimeOffset.UtcNow);
         if (startMonitoring)
         {
-            // Preserve NVIDIA-only normal launch. Extra hardware/runtime sources require --sources.
-            monitoring = telemetry ?? (configuration == null ? new DashboardTelemetry([new NvidiaCollector()]) : DashboardTelemetry.Create(configuration));
+            // Default GPU process inventory shares NVIDIA polling; other hardware/runtime sources still require --sources.
+            monitoring = telemetry ?? (configuration == null ? new DashboardTelemetry([new NvidiaCollector(), new NvidiaProcessCollector()]) : DashboardTelemetry.Create(configuration));
             tray = new System.Windows.Forms.NotifyIcon { Text = "GPU Monitor", Icon = System.Drawing.SystemIcons.Application, Visible = true };
             InitializeTray();
             tray.DoubleClick += (_, _) => Dispatcher.Invoke(Restore);
@@ -205,27 +226,54 @@ public sealed partial class OverviewWindow : Window
         var session = snapshots.Single(s => s.Source == NvidiaTelemetry.SourceId);
         var readings = session.Current == null ? Array.Empty<GpuReading>() : NvidiaSnapshot.Readings(session.Current).ToArray();
         var ids = readings.Select(g => g.Id).ToHashSet();
-        foreach (var id in cards.Keys.Where(id => !ids.Contains(id)).ToArray()) { gpuGrid.Children.Remove(cards[id]); cards.Remove(id); deviceColors.Remove(id); }
+        foreach (var id in cards.Keys.Where(id => !ids.Contains(id)).ToArray())
+        {
+            if (gpuPopouts.TryGetValue(id, out var popped)) popped.Window.Close();
+            gpuGrid.Children.Remove(cards[id]); cards.Remove(id); deviceColors.Remove(id);
+        }
         foreach (var gpu in readings)
         {
             if (!cards.TryGetValue(gpu.Id, out var card))
             {
                 deviceColors[gpu.Id] = Colors[nextColor++ % Colors.Length];
                 cards[gpu.Id] = card = new(); gpuGrid.Children.Add(card);
+                string gpuId = gpu.Id;
+                card.OpenWindowRequested += () => OpenGpuWindow(gpuId);
+                card.SelectRequested += () => customWorkspace.OpenPicker(gpuId);
                 foreach (var plot in card.Plots) plot.CursorMoved += SetCursor;
             }
-            card.Update(gpu, session, settings.WindowMinutes, now, details);
+            card.Update(gpu, session, snapshots, settings.WindowMinutes, now, details);
+            if (gpuPopouts.TryGetValue(gpu.Id, out var popped))
+                popped.Card.Update(gpu, session, snapshots, settings.WindowMinutes, now, details);
         }
         // Reorder existing visuals to match the current display indices without changing UUID history.
         for (int i = 0; i < readings.Length; i++)
             if (gpuGrid.Children[i] != cards[readings[i].Id]) { gpuGrid.Children.Remove(cards[readings[i].Id]); gpuGrid.Children.Insert(i, cards[readings[i].Id]); }
-        if (!comparisonIds.SequenceEqual(readings.Select(g => g.Id)))
+        bool comparisonChanged = !comparisonIds.SequenceEqual(readings.Select(g => g.Id));
+        if (comparisonChanged)
         {
             comparisonIds = readings.Select(g => g.Id).ToArray();
-            comparison.SetSeries(readings.Select(g => ($"GPU {g.Index}", deviceColors[g.Id])).ToArray());
+            comparison.SetSeries(readings.Select(g => ($"GPU {g.Index}", deviceColors[g.Id])).ToArray(), comparisonAsArea);
         }
         comparison.Update(readings.Select(g => session.Series(g.Id, "utilization.gpu")).ToArray(), now, settings.WindowMinutes);
         comparison.Opacity = session.Health == ProviderHealth.Stale ? .5 : 1;
+        comparisonProcessGpuId ??= readings.FirstOrDefault()?.Id;
+        bool comparisonGpuSelected = comparisonProcessGpuId != null && ids.Contains(comparisonProcessGpuId);
+        if (!comparisonGpuSelected) comparisonProcesses.IsShown = false;
+        if (comparisonGpuSelected) comparisonProcesses.Update(comparisonProcessGpuId!, snapshots);
+        if (comparisonPopout is { } detached)
+        {
+            if (comparisonChanged || detached.Plot.SeriesCount != readings.Length || detachedComparisonArea != comparisonAsArea)
+            {
+                detached.Plot.SetSeries(readings.Select(g => ($"GPU {g.Index}", deviceColors[g.Id])).ToArray(), comparisonAsArea);
+                detachedComparisonArea = comparisonAsArea;
+            }
+            for (int i = 0; i < readings.Length; i++) detached.Plot.SetName(i, $"GPU {readings[i].Index}");
+            detached.Plot.Update(readings.Select(g => session.Series(g.Id, "utilization.gpu")).ToArray(), now, settings.WindowMinutes);
+            detached.Plot.Opacity = comparison.Opacity;
+            if (!comparisonGpuSelected) detached.Processes.IsShown = false;
+            if (comparisonGpuSelected) detached.Processes.Update(comparisonProcessGpuId!, snapshots);
+        }
         legend.Children.Clear();
         for (int i = 0; i < readings.Length; i++)
         {
@@ -242,10 +290,144 @@ public sealed partial class OverviewWindow : Window
         summary.Text = collapsed ? $"{readings.Length} GPUs" : $"{readings.Length} GPUs detected\nLast update  {session.LastSuccess?.ToLocalTime():HH:mm:ss}\n{(paused ? "Paused" : session.Health.ToString())}";
         foreach (var button in rangeButtons) button.Background = (int)button.Tag == settings.WindowMinutes ? OverviewTheme.Brush("#184880") : OverviewTheme.Surface;
         cpuCard.Update(snapshots, now, settings.WindowMinutes); diskCard.Update(snapshots, now, settings.WindowMinutes);
+        foreach (var hardwareDetached in hardwarePopouts.Values)
+            hardwareDetached.Card.Update(snapshots, now, settings.WindowMinutes);
         customWorkspace.Visibility = customWorkspace.PanelCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         customWorkspace.Refresh(snapshots, now, settings.WindowMinutes);
         Reflow();
     }
+    private void OpenComparisonMenu(Button target, TelemetryPlot plot)
+    {
+        var menu = OverviewTheme.Menu();
+        var gpuChoices = WorkspaceSources().FirstOrDefault(s => s.Source == NvidiaTelemetry.SourceId)?.Current?.Devices
+            .Where(d => d.Kind == DeviceKind.Gpu).ToArray() ?? [];
+        var visible = new MenuItem { Header = "Visible GPU series" };
+        for (int i = 0; i < Math.Min(plot.SeriesCount, gpuChoices.Length); i++)
+        {
+            int index = i;
+            var gpu = gpuChoices[i];
+            var item = OverviewTheme.MenuCommand($"GPU {gpu.DisplayIndex} · {gpu.Name}",
+                () => plot.ShowSeries(index, !plot.IsSeriesVisible(index)));
+            item.IsCheckable = true; item.IsChecked = plot.IsSeriesVisible(index); visible.Items.Add(item);
+        }
+        if (visible.Items.Count == 0) visible.IsEnabled = false;
+        menu.Items.Add(visible);
+        var chartMode = new MenuItem { Header = "Graph type" };
+        foreach (bool area in new[] { false, true })
+        {
+            var item = OverviewTheme.MenuCommand(area ? "Area" : "Line", () =>
+            {
+                comparisonAsArea = area; comparisonIds = []; Render(viewTime);
+            });
+            item.IsCheckable = true; item.IsChecked = comparisonAsArea == area; chartMode.Items.Add(item);
+        }
+        menu.Items.Add(chartMode);
+        var processes = new MenuItem { Header = "GPU for process details" };
+        foreach (var gpu in gpuChoices)
+        {
+            var item = OverviewTheme.MenuCommand($"GPU {gpu.DisplayIndex} · {gpu.Name}",
+                () => { comparisonProcessGpuId = gpu.Id; Render(viewTime); });
+            item.IsCheckable = true; item.IsChecked = comparisonProcessGpuId == gpu.Id; processes.Items.Add(item);
+        }
+        if (processes.Items.Count == 0) processes.IsEnabled = false;
+        menu.Items.Add(processes);
+        menu.Items.Add(OverviewTheme.MenuCommand("Create custom GPU sensor panel…",
+            () => customWorkspace.OpenPicker("utilization.gpu")));
+        menu.PlacementTarget = target; menu.IsOpen = true;
+    }
+
+    private void OpenComparisonWindow()
+    {
+        if (comparisonPopout is { } old) { old.Window.Activate(); return; }
+        var plot = new TelemetryPlot("%", 100) { Height = 270 };
+        var processes = new GpuProcessView();
+        var body = new StackPanel { Margin = new(14) };
+        var heading = new DockPanel { Margin = new(0, 0, 0, 12) };
+        var select = OverviewTheme.Command("Select", () => { }, "Select comparison graph and GPU sensors");
+        select.Click += (_, _) => OpenComparisonMenu(select, plot);
+        var tools = new StackPanel { Orientation = Orientation.Horizontal };
+        var showProcesses = OverviewTheme.Command("Processes", processes.Toggle, "Show or hide GPU process details");
+        tools.Children.Add(showProcesses); tools.Children.Add(select);
+        DockPanel.SetDock(tools, Dock.Right); heading.Children.Add(tools);
+        heading.Children.Add(OverviewTheme.Text("GPU utilization comparison", 16));
+        body.Children.Add(heading); body.Children.Add(plot); body.Children.Add(processes);
+        OverviewTheme.PlotMenu(plot, "%", "detached-gpu-comparison");
+        plot.CursorMoved += SetCursor;
+        var window = new Window
+        {
+            Owner = this, Title = "GPU comparison · GPU Monitor",
+            Width = 860, Height = 560, MinWidth = 340, MinHeight = 280,
+            Background = OverviewTheme.Canvas, Foreground = Brushes.White,
+            FontFamily = new FontFamily("Segoe UI"), ResizeMode = ResizeMode.CanResize,
+            Content = new ScrollViewer
+            { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+              HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }
+        };
+        window.SizeChanged += (_, _) =>
+        {
+            plot.Width = Math.Max(270, window.ActualWidth - 56);
+            plot.Height = Math.Max(160, window.ActualHeight - 220);
+        };
+        window.Closed += (_, _) => { comparisonPopout = null; detachedComparisonArea = null; };
+        comparisonPopout = (window, plot, processes);
+        Render(viewTime);
+        window.Show();
+    }
+
+    private void OpenHardwareWindow(bool cpu)
+    {
+        if (hardwarePopouts.TryGetValue(cpu, out var current)) { current.Window.Activate(); return; }
+        var card = new HardwareOverviewCard(cpu);
+        var window = new Window
+        {
+            Owner = this, Title = (cpu ? "CPU" : "Disk") + " · GPU Monitor",
+            Width = 740, Height = 460, MinWidth = 340, MinHeight = 280,
+            Background = OverviewTheme.Canvas, Foreground = Brushes.White,
+            FontFamily = new FontFamily("Segoe UI"), ResizeMode = ResizeMode.CanResize,
+            Content = new ScrollViewer
+            { Content = card, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Padding = new(14) }
+        };
+        window.SizeChanged += (_, _) =>
+        {
+            card.Width = Math.Max(290, window.ActualWidth - 56);
+            card.Plot.Height = Math.Max(112, window.ActualHeight - 230);
+        };
+        window.Closed += (_, _) => hardwarePopouts.Remove(cpu);
+        hardwarePopouts.Add(cpu, (window, card));
+        card.Update(WorkspaceSources(), viewTime, settings.WindowMinutes);
+        window.Show();
+    }
+
+    private void OpenGpuWindow(string gpuId)
+    {
+        if (gpuPopouts.TryGetValue(gpuId, out var old)) { old.Window.Activate(); return; }
+        var card = new GpuOverviewCard();
+        card.SelectRequested += () => customWorkspace.OpenPicker(gpuId);
+        var window = new Window
+        {
+            Title = "GPU Monitor · GPU details",
+            Width = 800, Height = 730, MinWidth = 390, MinHeight = 330,
+            Background = OverviewTheme.Canvas, Foreground = Brushes.White,
+            FontFamily = new FontFamily("Segoe UI"), ResizeMode = ResizeMode.CanResize,
+            Content = new ScrollViewer
+            { Content = card, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new(14) }
+        };
+        window.SizeChanged += (_, _) =>
+        {
+            card.Width = Math.Max(320, window.ActualWidth - 56);
+            double chartHeight = Math.Max(128, (window.ActualHeight - 340) / 2);
+            card.Usage.Height = card.Memory.Height = chartHeight;
+        };
+        window.Closed += (_, _) => gpuPopouts.Remove(gpuId);
+        gpuPopouts.Add(gpuId, (window, card));
+        var sources = WorkspaceSources();
+        var source = sources.FirstOrDefault(s => s.Source == NvidiaTelemetry.SourceId);
+        var reading = source?.Current == null ? null : NvidiaSnapshot.Readings(source.Current).FirstOrDefault(g => g.Id == gpuId);
+        if (reading != null && source != null) card.Update(reading, source, sources, settings.WindowMinutes, viewTime, details);
+        window.Show();
+    }
+
     private void Reflow()
     {
         double width = gpuGrid.ActualWidth; if (width <= 0) return;

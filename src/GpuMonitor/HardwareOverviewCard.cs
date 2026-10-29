@@ -12,6 +12,9 @@ internal sealed class HardwareOverviewCard : Border
     private readonly TextBlock[] values = Enumerable.Range(0, 3).Select(_ => OverviewTheme.Text("—", 14)).ToArray();
     private readonly TelemetryPlot plot = new("%", 100) { Height = 112 };
     private readonly System.Windows.Controls.Button selector;
+    private readonly GpuProcessView processView = new();
+    private string? processGpuId;
+    public event Action? OpenWindowRequested;
     private IReadOnlyList<ProviderSnapshot> sources = [];
     private string? deviceId;
     public TelemetryPlot Plot => plot;
@@ -24,7 +27,14 @@ internal sealed class HardwareOverviewCard : Border
         var header = new DockPanel();
         selector = OverviewTheme.Command(cpu ? "CPU Usage  ⌄" : "Disk Usage  ⌄", ChooseDevice);
         selector.Padding = new(9, 4, 9, 4); selector.FontSize = 11;
-        DockPanel.SetDock(selector, Dock.Right); header.Children.Add(selector);
+        var actions = new StackPanel { Orientation = Orientation.Horizontal };
+        actions.Children.Add(selector);
+        var processes = OverviewTheme.Command("P", processView.Toggle, "Show or hide GPU process details");
+        processes.ToolTip = "Expand GPU processes"; processes.Padding = new(7, 3, 7, 3); actions.Children.Add(processes);
+        var open = OverviewTheme.Command("↗", () => OpenWindowRequested?.Invoke(),
+            "Open " + (cpu ? "CPU" : "disk") + " panel in new window");
+        open.ToolTip = "Open in new window"; open.Padding = new(8, 4, 8, 4);
+        actions.Children.Add(open); DockPanel.SetDock(actions, Dock.Right); header.Children.Add(actions);
         var title = new StackPanel { Orientation = Orientation.Horizontal };
         var icon = OverviewTheme.Text(cpu ? "\uE950" : "\uEDA2", 19, OverviewTheme.Blue); icon.FontFamily = new("Segoe MDL2 Assets"); icon.Margin = new(0, 0, 10, 0);
         title.Children.Add(icon); title.Children.Add(OverviewTheme.Text(cpu ? "CPU Usage (Custom Panel)" : "Disk Usage (Custom Panel)", 14));
@@ -37,7 +47,8 @@ internal sealed class HardwareOverviewCard : Border
             var column = new StackPanel(); column.Children.Add(OverviewTheme.Text(labels[i], 11, OverviewTheme.Muted));
             values[i].Margin = new(0, 3, 0, 0); column.Children.Add(values[i]); footer.Children.Add(column);
         }
-        content.Children.Add(footer); plot.SetSeries([(cpu ? "CPU" : "Disk", cpu ? "#229DFF" : "#AB53EA")]);
+        content.Children.Add(footer); content.Children.Add(processView);
+        plot.SetSeries([(cpu ? "CPU" : "Disk", cpu ? "#229DFF" : "#AB53EA")]);
         OverviewTheme.PlotMenu(plot, "%", cpu ? "cpu-usage" : "disk-active-time");
     }
 
@@ -52,13 +63,30 @@ internal sealed class HardwareOverviewCard : Border
             var item = OverviewTheme.MenuCommand(device.Name, () => deviceId = device.Id);
             item.IsCheckable = true; item.IsChecked = device.Id == deviceId; menu.Items.Add(item);
         }
-        if (menu.Items.Count == 0) menu.Items.Add(new MenuItem { Header = "Enable this hardware source to select a device", IsEnabled = false });
+        if (menu.Items.Count == 0)
+            menu.Items.Add(new MenuItem { Header = "Enable this hardware source to select a device", IsEnabled = false });
+        var gpuChoices = new MenuItem { Header = "GPU for process details" };
+        foreach (var gpu in sources.SelectMany(s => s.Current?.Devices ?? [])
+            .Where(d => d.Kind == DeviceKind.Gpu && d.Source == NvidiaTelemetry.SourceId))
+        {
+            var item = OverviewTheme.MenuCommand($"GPU {gpu.DisplayIndex} · {gpu.Name}", () => processGpuId = gpu.Id);
+            item.IsCheckable = true; item.IsChecked = gpu.Id == processGpuId;
+            gpuChoices.Items.Add(item);
+        }
+        if (gpuChoices.Items.Count == 0) gpuChoices.IsEnabled = false;
+        menu.Items.Add(new Separator()); menu.Items.Add(gpuChoices);
         menu.PlacementTarget = selector; menu.IsOpen = true;
     }
 
     public void Update(IReadOnlyList<ProviderSnapshot> snapshots, DateTimeOffset now, int minutes)
     {
         sources = snapshots;
+        var availableGpus = snapshots.SelectMany(s => s.Current?.Devices ?? [])
+            .Where(d => d.Source == NvidiaTelemetry.SourceId && d.Kind == DeviceKind.Gpu).ToArray();
+        processGpuId ??= availableGpus.FirstOrDefault()?.Id;
+        bool hasGpu = processGpuId != null && availableGpus.Any(d => d.Id == processGpuId);
+        if (!hasGpu) processView.IsShown = false;
+        if (hasGpu) processView.Update(processGpuId!, snapshots);
         deviceId ??= Devices().FirstOrDefault()?.Id;
         var device = Devices().FirstOrDefault(d => d.Id == deviceId);
         var source = sources.FirstOrDefault(s => s.Source == (cpu ? "windows-system" : "windows-disks"));

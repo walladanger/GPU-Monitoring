@@ -11,6 +11,9 @@ internal sealed class GpuOverviewCard : Border
     private readonly TextBlock memoryAmount = OverviewTheme.Text("", 12, OverviewTheme.Muted);
     private readonly TextBlock power = OverviewTheme.Text("N/A", 15), temp = OverviewTheme.Text("N/A", 15), fan = OverviewTheme.Text("N/A", 15);
     private readonly TextBlock details = OverviewTheme.Text("", 12, OverviewTheme.Muted);
+    private readonly GpuProcessView processView = new();
+    public event Action? OpenWindowRequested;
+    public event Action? SelectRequested;
     private readonly TextBlock graphLabel = OverviewTheme.Text("GPU utilization", 13, OverviewTheme.Muted);
     private readonly Button graphSelector;
     private bool memorySelected;
@@ -26,7 +29,15 @@ internal sealed class GpuOverviewCard : Border
         var content = new StackPanel(); Child = content;
         var heading = new DockPanel { Margin = new(0, 0, 0, 12) };
         var dot = OverviewTheme.Text("●", 16, OverviewTheme.Green); dot.Margin = new(0, 0, 8, 0); heading.Children.Add(dot);
-        DockPanel.SetDock(model, Dock.Right); heading.Children.Add(model); heading.Children.Add(title); content.Children.Add(heading);
+        var right = new StackPanel { Orientation = Orientation.Horizontal };
+        right.Children.Add(model);
+        var processes = OverviewTheme.Command("P", processView.Toggle, "Show or hide GPU process details");
+        processes.ToolTip = "Expand GPU processes"; processes.Padding = new(7, 3, 7, 3); right.Children.Add(processes);
+        var select = OverviewTheme.Command("Select", () => SelectRequested?.Invoke(), "Select sensors for GPU panel");
+        select.ToolTip = "Select this GPU's charts and sensors"; select.Padding = new(7, 3, 7, 3); right.Children.Add(select);
+        var open = OverviewTheme.Command("↗", () => OpenWindowRequested?.Invoke(), "Open GPU panel in new window");
+        open.ToolTip = "Open GPU panel in new window"; open.Padding = new(7, 3, 7, 3); right.Children.Add(open);
+        DockPanel.SetDock(right, Dock.Right); heading.Children.Add(right); heading.Children.Add(title); content.Children.Add(heading);
         graphSelector = OverviewTheme.Command("Select graph ▾", OpenGraphMenu, "Select the data graph in this panel");
         graphSelector.Margin = new(0, 0, 0, 4);
         var chartHeading = new DockPanel { Margin = new(0, 0, 0, 8) };
@@ -49,7 +60,7 @@ internal sealed class GpuOverviewCard : Border
             pair.Item2.Margin = new(0, 5, 0, 0); column.Children.Add(pair.Item2); footer.Children.Add(column);
         }
         content.Children.Add(footer); details.Margin = new(0, 12, 0, 0); details.TextWrapping = TextWrapping.Wrap;
-        details.Visibility = Visibility.Collapsed; content.Children.Add(details);
+        details.Visibility = Visibility.Collapsed; content.Children.Add(details); content.Children.Add(processView);
         OverviewTheme.PlotMenu(Usage, "%", "gpu-utilization"); OverviewTheme.PlotMenu(Memory, "MiB", "gpu-memory");
     }
     private static UIElement SummaryMetric(string label, UIElement value)
@@ -77,7 +88,7 @@ internal sealed class GpuOverviewCard : Border
         Memory.Visibility = memory ? Visibility.Visible : Visibility.Collapsed;
         graphLabel.Text = memory ? "GPU memory" : "GPU utilization";
     }
-    public void Update(GpuReading gpu, ProviderSnapshot session, int minutes, DateTimeOffset now, bool showDetails)
+    public void Update(GpuReading gpu, ProviderSnapshot session, IReadOnlyList<ProviderSnapshot> sources, int minutes, DateTimeOffset now, bool showDetails)
     {
         title.Text = $"GPU {gpu.Index}"; model.Text = gpu.Name;
         static string Value(double? value, string unit) => value.HasValue ? $"{value:0.#}{unit}" : "N/A";
@@ -92,6 +103,7 @@ internal sealed class GpuOverviewCard : Border
         Memory.Update(new[] { session.Series(gpu.Id, "memory.used") }, now, minutes, 1024);
         details.Text = $"{gpu.Id} · PCI {gpu.Bus}\nGraphics {Value(gpu.Metrics["clocks.current.graphics"], " MHz")} · Memory {Value(gpu.Metrics["clocks.current.memory"], " MHz")}";
         details.Visibility = showDetails ? Visibility.Visible : Visibility.Collapsed;
+        processView.Update(gpu.Id, sources);
         Opacity = session.Health == ProviderHealth.Stale ? .5 : 1;
     }
 }
