@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/GpuMonitor/EventTimeline.cs" Link="EventTimeline.cs" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="[10.0.13]" />
     <Compile Include="../../src/GpuMonitor/TrayReadings.cs" Link="TrayReadings.cs" />
     <Compile Include="../../src/GpuMonitor/GpuPanelSettings.cs" Link="GpuPanelSettings.cs" />

@@ -59,6 +59,7 @@ HistoryStoreChecks.Run(Check);
 PersistenceSettingsChecks.Run(Check);
 TrayReadingsChecks.Run(Check);
 PlotRangeChecks.Run(Check);
+EventTimelineChecks.Run(Check);
 await TelemetrySessionChecks.Run(Check);
 await TelemetryEngineChecks.Run(Check);
 await DashboardTelemetryChecks.Run(Check);
