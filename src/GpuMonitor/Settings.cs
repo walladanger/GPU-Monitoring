@@ -8,6 +8,7 @@ public sealed class Settings
     public Dictionary<string, GpuPanelSettings> GpuPanels { get; set; } = new();
     public int RefreshSeconds { get; set; } = 2;
     public int WindowMinutes { get; set; } = 5;
+    public bool SynchronizeCharts { get; set; } = true;
     public string AccentColor { get; set; } = "#229DFF";
     public bool MinimizeToTray { get; set; } = true;
     public bool HistoryEnabled { get; set; }
