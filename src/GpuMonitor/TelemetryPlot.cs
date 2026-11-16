@@ -40,6 +40,8 @@ public sealed partial class TelemetryPlot : Grid
     private string SeriesUnit(int index) => axisDefinitions == null ? unit : axisDefinitions.Single(a => a.Index == axisAssignments[index]).DisplayUnit;
 
     private bool laneMode;
+    private bool stepped;
+    public void SetStepped(bool enabled) => stepped = enabled;
     private double[] laneMaxima = [];
     public void SetLaneMode(bool enabled) { laneMode = enabled; if (enabled) foreach (var line in series) line.ScalesYAt = 0; }
     private double? DisplayValue(int index, double? raw) => laneMode ? (series.Count - index - 1) * 100 + raw / SeriesDivisor(index) / laneMaxima[index] * 85 : raw / SeriesDivisor(index);
@@ -167,7 +169,7 @@ public sealed partial class TelemetryPlot : Grid
         }
         if (laneMode) foreach (var axis in valueAxes) { axis.MaxLimit = series.Count * 100; axis.MinStep = 100; }
         for (int i = 0; i < series.Count; i++)
-            series[i].Values = visible[i]
+            series[i].Values = PlotData.Vertices(visible[i], stepped)
                 .Select(s => new ObservablePoint(s.Time.ToUnixTimeMilliseconds(), DisplayValue(i, s.Value))).ToArray();
         currentReadings.Text = string.Join("\n", visible.Select((samples, i) => !series[i].IsVisible ? "" : ReadingName(i) + " · " +
             (samples.LastOrDefault()?.Value is double value ? $"{value / SeriesDivisor(i):0.#}{SeriesUnit(i)}" : "Unavailable")).Where(s => s.Length > 0));

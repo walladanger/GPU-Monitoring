@@ -91,16 +91,16 @@ internal sealed class PanelSurface : Border
     {
         selected?.CloseDetached(); selected = null;
         if (settings.Sensors is { Count: > 0 }) {
-            selected = new(new("surface-view", title, 1, Math.Clamp((int)(settings.Height / 100), 1, 8), settings.Lanes ? "lanes" : settings.Area ? "area" : "line", settings.Sensors), Edit);
+            selected = new(new("surface-view", title, 1, Math.Clamp((int)(settings.Height / 100), 1, 8), settings.Lanes ? "lanes" : settings.Stepped ? "step" : settings.Area ? "area" : "line", settings.Sensors), Edit);
             view.Content = selected;
         } else view.Content = original;
         ApplySize();
     }
     private void Edit()
     {
-        var panel = new WorkspacePanel("surface-view", title, 1, 2, settings.Lanes ? "lanes" : settings.Area ? "area" : "line", settings.Sensors ?? defaults);
+        var panel = new WorkspacePanel("surface-view", title, 1, 2, settings.Lanes ? "lanes" : settings.Stepped ? "step" : settings.Area ? "area" : "line", settings.Sensors ?? defaults);
         var editor = new WorkspacePanelEditor(window ?? Window.GetWindow(this), sources(), panel.Series.Count == 0 ? null : panel);
-        if (editor.ShowDialog() == true && editor.Result != null) { DevelopmentLog.Write("panel-select", $"{title}: {editor.Result.Series.Count} sensors; {editor.Result.Chart}"); settings.Sensors = editor.Result.Series.ToList(); settings.Area = editor.Result.Chart == "area"; settings.Lanes = editor.Result.Chart == "lanes"; save(); ApplyView(); Refresh(sources(), DateTimeOffset.UtcNow, settings.Minutes); }
+        if (editor.ShowDialog() == true && editor.Result != null) { DevelopmentLog.Write("panel-select", $"{title}: {editor.Result.Series.Count} sensors; {editor.Result.Chart}"); settings.Sensors = editor.Result.Series.ToList(); settings.Area = editor.Result.Chart == "area"; settings.Lanes = editor.Result.Chart == "lanes"; settings.Stepped = editor.Result.Chart == "step"; save(); ApplyView(); Refresh(sources(), DateTimeOffset.UtcNow, settings.Minutes); }
     }
     private void Options()
     {

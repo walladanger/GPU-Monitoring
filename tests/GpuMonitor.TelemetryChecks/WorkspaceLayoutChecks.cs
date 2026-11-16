@@ -19,6 +19,8 @@ internal static class WorkspaceLayoutChecks
             check(restored.Panels.Select(p => p.Id).SequenceEqual(new[] { "gpu-a", "gpu-b" }) &&
                 restored.Panels[0].WidthSlots == 2 && restored.Panels[0].HeightRows == 3 && restored.Panels[0].Series.Single() == selection,
                 "Named workspace JSON round-trips order, dimensions and stable source/device/metric bindings");
+            await store.SaveAsync("stepped", layout with { Panels = [layout.Panels[0] with { Chart = "step" }] });
+            check((await store.LoadAsync("stepped")).Panels.Single().Chart == "step", "Stepped graph style survives versioned workspace save and restore");
             bool rejected = false;
             string outside = "outside-" + Guid.NewGuid().ToString("N");
             try { await store.SaveAsync("../" + outside, layout); } catch (ArgumentException) { rejected = true; }

@@ -66,7 +66,7 @@ public sealed class WorkspacePresetStore(string directory)
         foreach (var panel in layout.Panels)
         {
             if (panel == null || !Identifier(panel.Id) || !panelIds.Add(panel.Id) || !Text(panel.Title, 96) ||
-                panel.WidthSlots is < 1 or > 4 || panel.HeightRows is < 1 or > 8 || panel.Chart is not ("line" or "area" or "lanes") ||
+                panel.WidthSlots is < 1 or > 4 || panel.HeightRows is < 1 or > 8 || panel.Chart is not ("line" or "area" or "lanes" or "step") ||
                 panel.Series == null || panel.Series.Count is < 1 or > 16 || (panel.Chart == "lanes" && panel.Series.Count > 8))
                 throw new FormatException("Invalid workspace panel or duplicate panel identity.");
             var selected = new HashSet<(string, string, string)>();

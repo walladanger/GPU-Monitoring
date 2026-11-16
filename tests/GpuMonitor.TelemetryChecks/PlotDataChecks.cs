@@ -40,5 +40,11 @@ internal static class PlotDataChecks
         using var text = new StringWriter(); PlotData.WriteText(text, window.Select(s => new PlotExportRow(s, "%")));
         check(text.ToString().Contains("N/A %") && text.ToString().Contains("20.125 %") && text.ToString().Contains(d.Id),
             "Readable chart text preserves exact values, units, gaps and stable device identity");
+        var stepSource = new[] { Sample(-10, 12.3456789), Sample(-5, 20), Sample(-2, null), Sample(0, 30) };
+        var vertices = PlotData.Vertices(stepSource, true).ToArray();
+        check(vertices.Length == 6 && vertices[1].Time == stepSource[1].Time && vertices[1].Value == 12.3456789 && vertices[2].Value == 20,
+            "Stepped geometry holds the previous measured value until the next source timestamp");
+        check(vertices[^2].Value == null && vertices[^1].Value == 30 && PlotData.Vertices(stepSource, false).Count() == 4,
+            "Stepped charts preserve missing-value breaks and ordinary line geometry");
     }
 }

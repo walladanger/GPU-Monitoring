@@ -14,6 +14,7 @@ internal sealed class WorkspacePanelEditor : Window
     private readonly TextBlock status = OverviewTheme.Text("", 12, OverviewTheme.Muted);
     private readonly RadioButton area = new() { Content = "Area", Foreground = Brushes.White, Margin = new(16, 0, 0, 0), GroupName = "ChartType" };
     private readonly RadioButton lanes = new() { Content = "Stacked lanes (up to 8)", Foreground = Brushes.White, Margin = new(16, 0, 0, 0), GroupName = "ChartType" };
+    private readonly RadioButton step = new() { Content = "Stepped", Foreground = Brushes.White, Margin = new(16, 0, 0, 0), GroupName = "ChartType" };
     internal readonly Dictionary<WorkspaceSeries, CheckBox> VisibleChoices = [];
     internal readonly System.Windows.Controls.Button ApplyButton;
     public WorkspacePanel? Result { get; private set; }
@@ -48,7 +49,7 @@ internal sealed class WorkspacePanelEditor : Window
         search = Input(initialQuery, "Search monitoring sensors"); header.Children.Add(search);
         var mode = new StackPanel { Orientation = Orientation.Horizontal, Margin = new(0, 4, 0, 12) };
         mode.Children.Add(new RadioButton { Content = "Line", IsChecked = original.Chart == "line", Foreground = Brushes.White, GroupName = "ChartType" });
-        area.IsChecked = original.Chart == "area"; mode.Children.Add(area); lanes.IsChecked = original.Chart == "lanes"; mode.Children.Add(lanes); header.Children.Add(mode);
+        area.IsChecked = original.Chart == "area"; mode.Children.Add(area); step.IsChecked = original.Chart == "step"; mode.Children.Add(step); lanes.IsChecked = original.Chart == "lanes"; mode.Children.Add(lanes); header.Children.Add(mode);
         var footer = new DockPanel { Margin = new(0, 12, 0, 0) }; DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
         ApplyButton = OverviewTheme.Command("Apply", () => { if (TryApply()) DialogResult = true; });
         ApplyButton.IsDefault = true; DockPanel.SetDock(ApplyButton, Dock.Right); footer.Children.Add(ApplyButton);
@@ -84,7 +85,7 @@ internal sealed class WorkspacePanelEditor : Window
     {
         var selectedChoices = catalog.Where(c => selected.Contains(c.Selection)).ToArray();
         var series = selectedChoices.Select(c => c.Selection).ToArray();
-        var candidate = original with { Title = title.Text.Trim(), Chart = lanes.IsChecked == true ? "lanes" : area.IsChecked == true ? "area" : "line", Series = series };
+        var candidate = original with { Title = title.Text.Trim(), Chart = lanes.IsChecked == true ? "lanes" : step.IsChecked == true ? "step" : area.IsChecked == true ? "area" : "line", Series = series };
         try
         {
             if (series.Length is < 1 or > 16) throw new FormatException("Select between 1 and 16 sensors.");
