@@ -57,11 +57,15 @@ public sealed partial class TelemetryPlot
         }
         if (nearest == null || selectedPoint is { } current && current.Series == nearest.Value.Index && current.Sample == nearest.Value.Sample) { ClearSelection(); return; }
         selectedPoint = (nearest.Value.Index, nearest.Value.Sample); RefreshSelectedPoint();
+        CursorMoved?.Invoke(this, nearest.Value.Sample.Time);
     }
     internal void ClearSelection()
     {
+        bool hadSelection = selectedPoint != null;
+        inspectionTime = null;
         selectedPoint = null; selectedMarker.Visibility = Visibility.Collapsed;
         inspection.Text = ""; detailPanel.Visibility = Visibility.Collapsed; cursor.Visibility = Visibility.Collapsed;
+        if (hadSelection) CursorMoved?.Invoke(this, null);
     }
     private void RefreshSelectedPoint()
     {

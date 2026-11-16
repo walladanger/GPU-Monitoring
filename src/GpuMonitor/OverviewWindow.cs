@@ -11,6 +11,7 @@ namespace GpuMonitor;
 
 public sealed partial class OverviewWindow : Window
 {
+    internal ChartSynchronization ChartSynchronization { get; } = new();
     private readonly TelemetrySession fixtureSession = new(new NvidiaCollector());
     private readonly DashboardTelemetry? monitoring;
     private readonly MonitoringWorkspace customWorkspace;
@@ -47,6 +48,7 @@ public sealed partial class OverviewWindow : Window
     {
         settings = preferences ?? (startMonitoring ? Settings.Load() : new Settings()); settings.Normalize(); savePreferences = startMonitoring && preferences == null; usesFixtureData = !startMonitoring || fixtureData;
         OverviewTheme.ApplyAccent(settings.AccentColor);
+        ChartSynchronization.Enabled = settings.SynchronizeCharts;
         historyPath = historyDirectory == null ? Settings.HistoryPath : Path.Combine(historyDirectory, "telemetry.sqlite");
         DevelopmentLog.Write("window", "Creating overview and panel surfaces");
         Title = "GPU Monitor"; Width = 1536; Height = 1024; MinWidth = 680; MinHeight = 540;
@@ -87,8 +89,9 @@ public sealed partial class OverviewWindow : Window
         timer.Interval = TimeSpan.FromSeconds(settings.RefreshSeconds); timer.Tick += (_, _) => Render(DateTimeOffset.UtcNow);
         if (startMonitoring)
         {
-            // One shared NVIDIA/process collector pair; optional hardware/runtime sources require --sources.
-            monitoring = telemetry ?? (configuration == null ? new DashboardTelemetry([new NvidiaCollector(), new NvidiaProcessCollector()]) : DashboardTelemetry.Create(configuration));
+            // Basic read-only hardware monitoring is available on ordinary launch.
+            // Runtime and metadata feeds still require explicit configuration.
+            monitoring = telemetry ?? DashboardTelemetry.Create(configuration);
             tray = new System.Windows.Forms.NotifyIcon { Text = "GPU Monitor", Icon = System.Drawing.SystemIcons.Application, Visible = true };
             InitializeTray();
             tray.DoubleClick += (_, _) => Dispatcher.Invoke(Restore);
@@ -165,6 +168,9 @@ public sealed partial class OverviewWindow : Window
     private void OpenSettings()
     {
         var menu = OverviewTheme.Menu();
+        var synchronized = OverviewTheme.MenuCommand("Synchronize chart cursors and timelines", () =>
+        { settings.SynchronizeCharts = !settings.SynchronizeCharts; ChartSynchronization.Enabled = settings.SynchronizeCharts; Save(); });
+        synchronized.IsCheckable = true; synchronized.IsChecked = settings.SynchronizeCharts; menu.Items.Add(synchronized);
         menu.Items.Add(OverviewTheme.MenuCommand("Open development log", () => {
             DevelopmentLog.Write("user", "Opened development log");
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("notepad.exe") { ArgumentList = { DevelopmentLog.Path }, UseShellExecute = false });
