@@ -67,7 +67,7 @@ public sealed partial class OverviewWindow : Window
         Grid.SetColumn(scroll, 1); workspace.Children.Add(scroll);
         empty.Margin = new(0, 30, 0, 30); body.Children.Add(empty); body.Children.Add(gpuGrid);
         hardwareRow.Children.Add(Surface("CPU", cpuCard)); hardwareRow.Children.Add(Surface("Disk", diskCard)); body.Children.Add(hardwareRow);
-        customWorkspace = new(WorkspaceSources, workspaceDirectory); body.Children.Add(customWorkspace);
+        customWorkspace = new(WorkspaceSources, workspaceDirectory, rememberCurrent: savePreferences && !usesFixtureData); body.Children.Add(customWorkspace);
         customWorkspace.LayoutChanged += () => customWorkspace.Visibility = customWorkspace.PanelCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         var comparisonContent = new StackPanel();
         var comparisonHeading = new DockPanel { Margin = new(0, 0, 0, 8) };
@@ -113,7 +113,7 @@ public sealed partial class OverviewWindow : Window
             e.Cancel = true;
             if (closed) return;
             closed = true; timer.Stop(); quickView?.Hide();
-            try { await monitoring.DisposeAsync(); }
+            try { try { await customWorkspace.FlushAsync(); } finally { await monitoring.DisposeAsync(); } }
             catch (Exception error) { System.Diagnostics.Trace.TraceError(error.ToString()); }
             finally { closing = true; _ = Dispatcher.BeginInvoke(new Action(Close)); }
         };

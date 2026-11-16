@@ -27,20 +27,21 @@ public sealed partial class TelemetryPlot
 
     private void WireNavigation()
     {
-        var toolbar = new StackPanel();
+        var toolbar = new DockPanel();
         var actions = new WrapPanel { Margin = new(0, 0, 0, 2) };
         System.Windows.Controls.Button Add(string label, Action action, string help) {
             var button = OverviewTheme.Command(label, action, label == "↺ Live" ? "Reset to live" : label.Trim('+', '−', '←', '→', ' ')); button.ToolTip = help;
             button.Padding = new(6, 4, 6, 4); button.Margin = new(2); button.FontSize = 11;
             actions.Children.Add(button); return button;
         }
-        zoomInButton = Add("+ Zoom in", () => Zoom(.5), "Zoom in · Ctrl++ or Ctrl+wheel");
-        zoomOutButton = Add("− Zoom out", () => Zoom(2), "Zoom out · Ctrl+− or Ctrl+wheel");
-        Add("← Earlier", () => Pan(-.25), "Pan earlier · Ctrl+Left");
-        Add("Later →", () => Pan(.25), "Pan later · Ctrl+Right");
-        pauseButton = Add("Pause", () => { if (IsViewPaused) ResetView(); else PauseView(); }, "Pause or resume chart · Ctrl+Space");
-        Add("↺ Live", ResetView, "Reset zoom and return to live · Ctrl+Home");
-        toolbar.Children.Add(actions); toolbar.Children.Add(viewState); Children.Add(toolbar);
+        zoomInButton = Add("+", () => Zoom(.5), "Zoom in · Ctrl++ or Ctrl+wheel");
+        System.Windows.Automation.AutomationProperties.SetName(zoomInButton, "Zoom in");
+        zoomOutButton = Add("−", () => Zoom(2), "Zoom out · Ctrl+− or Ctrl+wheel");
+        System.Windows.Automation.AutomationProperties.SetName(zoomOutButton, "Zoom out");
+        pauseButton = Add("Ⅱ", () => { if (IsViewPaused) ResetView(); else PauseView(); }, "Pause or resume chart · Ctrl+Space");
+        var reset = Add("↺", ResetView, "Reset zoom and return to live · Ctrl+Home");
+        System.Windows.Automation.AutomationProperties.SetName(reset, "Reset to live");
+        DockPanel.SetDock(actions, Dock.Right); toolbar.Children.Add(actions); toolbar.Children.Add(viewState); Children.Add(toolbar);
         RefreshViewState();
         PreviewMouseDown += (_, _) => Focus();
         MouseDown += (_, e) => { if (e.ChangedButton == MouseButton.Left) { Focus(); e.Handled = true; } };
@@ -117,9 +118,9 @@ public sealed partial class TelemetryPlot
         double percent = windowMinutes * 6000d / seconds;
         string span = seconds >= 60 ? $"{seconds / 60:0.##} min" : $"{seconds:0.#} sec";
         viewState.Text = $"{(IsViewPaused ? "Paused" : "Live")} · Zoom {percent:0.#}% · {span}" +
-            (range == null ? " · Waiting for data" : $"\n{range.Start.ToLocalTime():HH:mm:ss} – {range.End.ToLocalTime():HH:mm:ss}");
+            (range == null ? " · Waiting for data" : $" · {range.Start.ToLocalTime():HH:mm:ss} – {range.End.ToLocalTime():HH:mm:ss}");
         if (pauseButton == null) return;
-        pauseButton.Content = IsViewPaused ? "Resume" : "Pause";
+        pauseButton.Content = IsViewPaused ? "▶" : "Ⅱ";
         System.Windows.Automation.AutomationProperties.SetName(pauseButton, IsViewPaused ? "Resume" : "Pause");
         OverviewTheme.SetSelected(pauseButton, IsViewPaused);
         zoomInButton.IsEnabled = range != null && seconds > 10;
