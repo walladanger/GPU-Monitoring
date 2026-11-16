@@ -9,6 +9,7 @@ namespace GpuMonitor;
 
 public sealed partial class TelemetryPlot
 {
+    internal event Action<TelemetryPlot, PlotRange?>? NavigationChanged;
     private IReadOnlyList<IReadOnlyList<TelemetrySample>> latestHistories = [];
     private IReadOnlyList<IReadOnlyList<TelemetrySample>>? frozenHistories;
     private DateTimeOffset latestTime, frozenTime;
@@ -68,26 +69,40 @@ public sealed partial class TelemetryPlot
     public void PauseView()
     {
         if (IsViewPaused || latestHistories.Count == 0) return;
+        FreezeView(); RefreshViewState(); NavigationChanged?.Invoke(this, viewRange);
+    }
+    private void FreezeView()
+    {
+        if (IsViewPaused || latestHistories.Count == 0) return;
         frozenTime = latestTime;
         frozenHistories = latestHistories.Select(h => (IReadOnlyList<TelemetrySample>)h.ToArray()).ToArray();
         viewRange = new(latestTime.AddMinutes(-windowMinutes), latestTime);
-        RefreshViewState();
     }
     public void Zoom(double factor, double anchor = .5)
     {
-        PauseView(); if (viewRange == null) return;
+        FreezeView(); if (viewRange == null) return;
         viewRange = viewRange.Zoom(factor, anchor, new(frozenTime.AddMinutes(-30), frozenTime));
-        ClearSelection(); RenderView();
+        ClearSelection(); RenderView(); NavigationChanged?.Invoke(this, viewRange);
     }
     public void Pan(double fraction)
     {
-        PauseView(); if (viewRange == null) return;
+        FreezeView(); if (viewRange == null) return;
         viewRange = viewRange.Pan(fraction, new(frozenTime.AddMinutes(-30), frozenTime));
-        ClearSelection(); RenderView();
+        ClearSelection(); RenderView(); NavigationChanged?.Invoke(this, viewRange);
     }
     public void ResetView()
     {
         viewRange = null; frozenHistories = null; ClearSelection();
+        if (latestHistories.Count > 0) RenderView(); else RefreshViewState();
+        NavigationChanged?.Invoke(this, null);
+    }
+    internal void ApplySynchronizedRange(PlotRange? range)
+    {
+        // Each chart freezes its own measured samples. Shared time limits do not
+        // interpolate, fabricate or copy values from the originating chart.
+        if (range == null) { viewRange = null; frozenHistories = null; }
+        else { FreezeView(); viewRange = range; }
+        ClearSelection();
         if (latestHistories.Count > 0) RenderView(); else RefreshViewState();
     }
     public void ShowSeries(int index, bool show)
