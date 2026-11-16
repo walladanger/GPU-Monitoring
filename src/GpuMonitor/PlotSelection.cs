@@ -64,7 +64,7 @@ public sealed partial class TelemetryPlot
         bool hadSelection = selectedPoint != null;
         inspectionTime = null;
         selectedPoint = null; selectedMarker.Visibility = Visibility.Collapsed;
-        inspection.Text = ""; detailPanel.Visibility = Visibility.Collapsed; cursor.Visibility = Visibility.Collapsed;
+        inspection.Text = ""; detailPanel.Visibility = Visibility.Collapsed; cursor.Visibility = valueCursor.Visibility = Visibility.Collapsed;
         if (hadSelection) CursorMoved?.Invoke(this, null);
     }
     private void RefreshSelectedPoint()
