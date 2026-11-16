@@ -75,4 +75,5 @@ await RuntimeTransportChecks.Run(Check);
 await MetadataFeedChecks.Run(Check);
 OtlpChecks.Run(Check);
 await CollectorConfigurationChecks.Run(Check);
+await TokenMonitorExportChecks.Run(Check);
 Console.WriteLine($"PASS: {passed} telemetry regression checks (no hardware or WPF required).");

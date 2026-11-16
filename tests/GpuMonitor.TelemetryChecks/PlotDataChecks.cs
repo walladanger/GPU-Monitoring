@@ -37,5 +37,8 @@ internal static class PlotDataChecks
             CsvTelemetry.Fields(mixedLines[2])[5] == "%" && CsvTelemetry.Fields(mixedLines[2])[6] == "43.25",
             "Mixed-unit CSV preserves each raw value and its own unit without converting to chart display units");
         check(CsvTelemetry.Fields(lines[2])[6] == "" && CsvTelemetry.Fields(lines[3])[6] == "20.125", "Plot CSV preserves gaps and exact numeric data");
+        using var text = new StringWriter(); PlotData.WriteText(text, window.Select(s => new PlotExportRow(s, "%")));
+        check(text.ToString().Contains("N/A %") && text.ToString().Contains("20.125 %") && text.ToString().Contains(d.Id),
+            "Readable chart text preserves exact values, units, gaps and stable device identity");
     }
 }
