@@ -1,7 +1,7 @@
 [Setup]
 AppId=GpuMonitor
 AppName=GPU Monitor
-AppVersion=1.0.0
+AppVersion=2.0.0-preview.1
 DefaultDirName={localappdata}\Programs\GpuMonitor
 DefaultGroupName=GPU Monitor
 PrivilegesRequired=lowest
@@ -20,6 +20,10 @@ Source: "..\publish\*"; DestDir: "{app}"; Excludes: "Install.cmd,Install.ps1,Uni
 
 [Icons]
 Name: "{group}\GPU Monitor"; Filename: "{app}\GpuMonitor.exe"
+Name: "{autodesktop}\GPU Monitor"; Filename: "{app}\GpuMonitor.exe"; Tasks: desktopicon
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 
 [Run]
 Filename: "{app}\GpuMonitor.exe"; Description: "Launch GPU Monitor"; Flags: nowait postinstall skipifsilent
