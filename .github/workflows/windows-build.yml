@@ -106,6 +106,9 @@ jobs:
           $exe = Resolve-Path src/GpuMonitor/publish/GpuMonitor.exe
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./src/GpuMonitor/publish/Validate-GpuMonitor.ps1 -Executable $exe -ExpectedGpuCount 0 -DurationSeconds 6 -OutputRoot (Join-Path $env:RUNNER_TEMP 'GPU validation with spaces')
           if ($LASTEXITCODE -ne 0) { throw 'Packaged acceptance runner failed' }
+      - name: Verify installer install upgrade shortcuts and uninstall
+        shell: pwsh
+        run: ./tests/acceptance/InstallerLifecycleChecks.ps1 -Installer ./src/GpuMonitor/artifacts/GPU-Monitor-Setup.exe
       - name: Verify actual dashboard engine lifecycle
         shell: pwsh
         run: |
@@ -133,6 +136,16 @@ jobs:
           $result = Join-Path (Split-Path $exe) 'overview-verification/charts-result.txt'
           if (Test-Path $result) { Get-Content $result }
           if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Chart interaction verification failed' }
+      - name: Verify native configurable panels and popup lifecycle
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/GpuMonitor.exe
+          $process = Start-Process $exe -ArgumentList '--verify-panels' -PassThru
+          if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Panel verification timed out' }
+          $result = Join-Path (Split-Path $exe) 'panel-verification/result.txt'
+          if (Test-Path $result) { Get-Content $result }
+          if (-not (Test-Path $result)) { throw 'Native panel verification produced no result' }
+          if ($process.ExitCode -ne 0) { throw 'Native panel verification failed' }
       - name: Verify persistent SQLite history and native saved-history browser
         shell: pwsh
         run: |
@@ -151,11 +164,21 @@ jobs:
           $result = Join-Path (Split-Path $exe) 'overview-verification/tray-result.txt'
           if (Test-Path $result) { Get-Content $result }
           if ($process.ExitCode -ne 0 -or -not (Test-Path $result)) { throw 'Tray verification failed' }
+      - name: Prepare versioned downloads and checksums
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content src/GpuMonitor/GpuMonitor.csproj
+          $version = $project.Project.PropertyGroup.Version
+          Copy-Item src/GpuMonitor/GPU-Monitor-Windows-x64.zip "src/GpuMonitor/artifacts/GPU-Monitor-$version-Windows-x64.zip"
+          Copy-Item src/GpuMonitor/artifacts/GPU-Monitor-Setup.exe "src/GpuMonitor/artifacts/GPU-Monitor-$version-Windows-x64-Setup.exe"
+          Get-ChildItem src/GpuMonitor/artifacts/GPU-Monitor-*Windows-x64* | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $([IO.Path]::GetFileName($_.Path))" } | Set-Content src/GpuMonitor/artifacts/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: GPU-Monitor-Overview-Verification
-          path: src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/overview-verification/
+          path: |
+            src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/overview-verification/
+            src/GpuMonitor/bin/Release/net10.0-windows10.0.19041.0/panel-verification/
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always()
@@ -169,4 +192,6 @@ jobs:
           path: |
             src/GpuMonitor/GPU-Monitor-Windows-x64.zip
             src/GpuMonitor/artifacts/GPU-Monitor-Setup.exe
+            src/GpuMonitor/artifacts/GPU-Monitor-*Windows-x64*
+            src/GpuMonitor/artifacts/SHA256SUMS.txt
           if-no-files-found: error
