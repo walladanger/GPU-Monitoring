@@ -61,19 +61,19 @@ internal sealed class GpuSensorPanel : StackPanel
         Plot.Height = surfaceHeight ?? (settings.Lanes ? Math.Max(480, (settings.Sensors?.Count ?? 1) * 90) : settings.Height);
         if (gpu == null || session == null) return;
         var selections = settings.Sensors ?? [new(NvidiaTelemetry.SourceId, gpu.Id, settings.Sensor)];
-        var panel = new WorkspacePanel("gpu-view", "GPU panel", 1, 1, settings.Lanes ? "lanes" : settings.Area ? "area" : "line", selections);
+        var panel = new WorkspacePanel("gpu-view", "GPU panel", 1, 1, settings.Lanes ? "lanes" : settings.Stepped ? "step" : settings.Area ? "area" : "line", selections);
         var data = WorkspaceMetrics.Project(panel, sources.Count == 0 ? [session] : sources);
         if (data.Error != null) { label.Text = data.Error; Plot.Visibility = Visibility.Collapsed; return; }
         Plot.Visibility = Visibility.Visible;
         if (data.Series.Count == 1 && selections[0].DeviceId == gpu.Id && selections[0].MetricKey == "memory.used")
             data = data with { Axes = data.Axes.Select(a => a with { MaximumOverride = gpu.Metrics["memory.total"] / 1024 }).ToArray() };
-        string next = string.Join("|", selections) + settings.Area + settings.Lanes + string.Join("|", data.Axes);
+        string next = string.Join("|", selections) + settings.Area + settings.Lanes + settings.Stepped + string.Join("|", data.Axes);
         if (signature != next || Plot.SeriesCount != data.Series.Count)
         {
             signature = next;
             string[] colors = ["#33DF32", "#2B82F8", "#A66CF2", "#FFBA4D", "#39BCD2", "#E977BD", "#F45A5A", "#DBCE32"];
             Plot.SetSeries(data.Series.Select((s, i) => (s.Name, s.Selection.MetricKey == "memory.used" && data.Series.Count == 1 ? "#2B82F8" : colors[i % colors.Length])).ToArray(), settings.Area);
-            Plot.ConfigureAxes(data.Axes, selections.Select(s => s.Axis).ToArray()); Plot.SetLaneMode(settings.Lanes);
+            Plot.ConfigureAxes(data.Axes, selections.Select(s => s.Axis).ToArray()); Plot.SetLaneMode(settings.Lanes); Plot.SetStepped(settings.Stepped);
             OverviewTheme.PlotMenu(Plot, data.Unit, gpu.Id + "-panel");
         }
         for (int i = 0; i < data.Series.Count; i++) Plot.SetName(i, data.Series[i].Name);
@@ -107,17 +107,18 @@ internal sealed class GpuSensorPanel : StackPanel
         }
         menu.Items.Insert(0, OverviewTheme.MenuCommand("Select multiple sensors / axes…", () => {
             if (gpu == null) return;
-            var panel = new WorkspacePanel("gpu-view", "GPU panel", 1, 1, settings.Lanes ? "lanes" : settings.Area ? "area" : "line", settings.Sensors ?? [new(NvidiaTelemetry.SourceId, gpu.Id, settings.Sensor)]);
+            var panel = new WorkspacePanel("gpu-view", "GPU panel", 1, 1, settings.Lanes ? "lanes" : settings.Stepped ? "step" : settings.Area ? "area" : "line", settings.Sensors ?? [new(NvidiaTelemetry.SourceId, gpu.Id, settings.Sensor)]);
             var editor = new WorkspacePanelEditor(Window.GetWindow(this), sources, panel);
-            if (editor.ShowDialog() == true && editor.Result != null) { settings.FollowGpuInventory = false; settings.Sensors = editor.Result.Series.ToList(); settings.Area = editor.Result.Chart == "area"; settings.Lanes = editor.Result.Chart == "lanes"; save(); Refresh(); }
+            if (editor.ShowDialog() == true && editor.Result != null) { settings.FollowGpuInventory = false; settings.Sensors = editor.Result.Series.ToList(); settings.Area = editor.Result.Chart == "area"; settings.Lanes = editor.Result.Chart == "lanes"; settings.Stepped = editor.Result.Chart == "step"; save(); Refresh(); }
         }));
         menu.Items.Add(new Separator());
         foreach (bool area in new[] { false, true })
         {
-            var item = OverviewTheme.MenuCommand(area ? "Area graph" : "Line graph", () => { settings.Area = area; settings.Lanes = false; save(); Refresh(); });
-            item.IsCheckable = true; item.IsChecked = settings.Area == area; menu.Items.Add(item);
+            var item = OverviewTheme.MenuCommand(area ? "Area graph" : "Line graph", () => { settings.Area = area; settings.Lanes = false; settings.Stepped = false; save(); Refresh(); });
+            item.IsCheckable = true; item.IsChecked = settings.Area == area && !settings.Stepped && !settings.Lanes; menu.Items.Add(item);
         }
-        menu.Items.Add(OverviewTheme.MenuCommand("Stacked lanes (up to 8 sensors)", () => { if ((settings.Sensors?.Count ?? 1) <= 8) { settings.Lanes = true; save(); Refresh(); } }));
+        menu.Items.Add(OverviewTheme.MenuCommand("Stepped graph", () => { settings.Stepped = true; settings.Lanes = false; settings.Area = false; save(); Refresh(); }));
+        menu.Items.Add(OverviewTheme.MenuCommand("Stacked lanes (up to 8 sensors)", () => { if ((settings.Sensors?.Count ?? 1) <= 8) { settings.Lanes = true; settings.Stepped = false; save(); Refresh(); } }));
         foreach (int minutes in new[] { 1, 5, 15, 30 })
             menu.Items.Add(OverviewTheme.MenuCommand($"Show {minutes} minutes", () => { settings.Minutes = minutes; save(); Refresh(); }));
         menu.PlacementTarget = this; menu.IsOpen = true;

@@ -5,9 +5,21 @@ namespace GpuMonitor;
 
 /// <summary>The same measured window is used for rendering, inspection and export.</summary>
 public sealed record PlotExportRow(TelemetrySample Sample, string Unit);
+public sealed record PlotVertex(DateTimeOffset Time, double? Value);
 
 public static class PlotData
 {
+    /// <summary>Optional hold-then-step display geometry. Extra vertices are not
+    /// telemetry measurements and never enter history, inspection or exports.</summary>
+    public static IEnumerable<PlotVertex> Vertices(IReadOnlyList<TelemetrySample> samples, bool stepped)
+    {
+        for (int i = 0; i < samples.Count; i++)
+        {
+            if (stepped && i > 0 && samples[i - 1].Value.HasValue)
+                yield return new(samples[i].Time, samples[i - 1].Value);
+            yield return new(samples[i].Time, samples[i].Value);
+        }
+    }
     /// <summary>Maps pointer fraction using the explicit view window, even before native chart initialization.</summary>
     public static DateTimeOffset? CursorTime(double fraction, DateTimeOffset start, DateTimeOffset end)
     {
