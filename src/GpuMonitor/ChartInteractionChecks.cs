@@ -71,6 +71,7 @@ internal static class ChartInteractionChecks
                 Require(scaleLabels.Any(l => l.Text.Contains('%') && !double.IsNaN(Canvas.GetLeft(l))) &&
                     scaleLabels.Any(l => l.Text.Contains("GiB") && !double.IsNaN(Canvas.GetRight(l))), "Inside left/right unit labels are absent.");
                 plot.SetCursor(now);
+                Require(plot.HasValueCrosshair, "Measured inspection omitted the horizontal value crosshair.");
                 Require(plot.InspectionText.Contains("33") && plot.InspectionText.Contains("15.5") && plot.InspectionText.Contains("GiB"), "Crosshair inspection lost independently converted values.");
                 plot.SetCursor(null); plot.SavePng(Path.Combine(output, "chart-dual-axis.png"));
                 var bitmap = new BitmapImage(new Uri(Path.Combine(output, "chart-dual-axis.png")));
@@ -110,6 +111,7 @@ internal static class ChartInteractionChecks
                 Require(linked.Count == 2, "Synchronization registered a chart twice.");
                 plot.InspectAt(plot.VerificationSamplePosition(0, usage[^1]));
                 Require(follower.IsInspecting && follower.InspectionText.Contains("N/A"), "Synchronized inspection fabricated a value over a missing measurement.");
+                Require(!follower.HasValueCrosshair, "A missing sample acquired a fabricated horizontal value crosshair.");
                 plot.InspectAt(new Point(-1, -1));
                 Require(!follower.IsInspecting, "Leaving the originating plot retained a remote cursor.");
                 plot.Zoom(.5);
@@ -134,6 +136,8 @@ internal static class ChartInteractionChecks
                 timeline.Update([sources[0] with { EventHistory = [] }], later, 5);
                 Require(timeline.View.Entries.Count == 1, "Paused event timeline lost its frozen metadata.");
                 timeline.SetCursor(now.AddSeconds(-15));
+                root.UpdateLayout();
+                Require(timeline.RenderedBars == 1, "Timeline model passed but its measured span did not render as a visible native bar.");
                 var timelineBitmap = new RenderTargetBitmap(1200, 650, 96, 96, PixelFormats.Pbgra32); timelineBitmap.Render(root);
                 var timelineEncoder = new PngBitmapEncoder(); timelineEncoder.Frames.Add(BitmapFrame.Create(timelineBitmap));
                 using (var stream = File.Create(Path.Combine(output, "activity-timeline.png"))) timelineEncoder.Save(stream);

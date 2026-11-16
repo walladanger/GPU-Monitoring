@@ -13,6 +13,8 @@ internal sealed class EventTimelinePanel : Border
     private readonly TextBlock status = OverviewTheme.Text("No recorded activity in this time window.", 12, OverviewTheme.Muted);
     private readonly TextBlock inspection = OverviewTheme.Text("", 11, OverviewTheme.Muted);
     private readonly ComboBox source = new() { MinWidth = 130, MaxWidth = 240 };
+    private readonly Line cursorLine = new() { Stroke = Brushes.LightGray, StrokeThickness = 1, IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+    internal int RenderedBars => canvas.Children.OfType<Border>().Count(b => b.ActualWidth > 0 && b.ActualHeight > 0);
     private IReadOnlyList<TelemetryEvent> events = [];
     private IReadOnlyList<TelemetryEvent>? frozen;
     private DateTimeOffset now;
@@ -29,7 +31,7 @@ internal sealed class EventTimelinePanel : Border
         var root = new StackPanel(); Child = root;
         var header = new DockPanel { Margin = new(0, 0, 0, 8) };
         var controls = new WrapPanel(); DockPanel.SetDock(controls, Dock.Right); header.Children.Add(controls);
-        source.Foreground = Brushes.White; source.Background = OverviewTheme.Surface; controls.Children.Add(source);
+        OverviewTheme.Input(source); controls.Children.Add(source);
         source.ItemsSource = new[] { "All sources" }; source.SelectedIndex = 0;
         foreach (string format in new[] { "csv", "json", "txt" }) controls.Children.Add(OverviewTheme.Command(format.ToUpperInvariant(), () => Export(format), "Export activity as " + format.ToUpperInvariant()));
         header.Children.Add(OverviewTheme.Text("Process / agent activity", 15)); root.Children.Add(header);
@@ -55,7 +57,7 @@ internal sealed class EventTimelinePanel : Border
         if (value == null) frozen = null; else frozen ??= events.ToArray();
         range = value; Render();
     }
-    public void SetCursor(DateTimeOffset? value) { cursor = value; Draw(); }
+    public void SetCursor(DateTimeOffset? value) { cursor = value; RefreshCursor(); }
     private void Render()
     {
         if (now == default) return;
@@ -89,9 +91,15 @@ internal sealed class EventTimelinePanel : Border
                 ToolTip = $"{item.Event.Kind} · {item.Event.Name}\n{item.Start:O} – {item.End:O}\n{item.Event.Source} · {item.Event.DeviceId}\nCorrelation: {item.Event.CorrelationId ?? "none"}\nDuration: {item.Event.Duration?.TotalMilliseconds.ToString("0.###") ?? "unknown"} ms\nTimestamp estimated: {item.Event.TimestampEstimated}" };
             Canvas.SetLeft(bar, X(item.Start)); Canvas.SetTop(bar, item.Lane * 40 + 17); canvas.Children.Add(bar);
         }
+        canvas.Children.Add(cursorLine); RefreshCursor();
+    }
+    private void RefreshCursor()
+    {
         inspection.Text = cursor == null ? "" : $"Shared cursor · {cursor.Value.ToLocalTime():yyyy-MM-dd HH:mm:ss.fff}";
-        if (cursor is { } time && time >= View.Range.Start && time <= View.Range.End)
-            canvas.Children.Add(new Line { X1 = X(time), X2 = X(time), Y1 = 0, Y2 = canvas.Height - 20, Stroke = Brushes.LightGray, StrokeThickness = 1, IsHitTestVisible = false });
+        cursorLine.Visibility = Visibility.Collapsed;
+        if (cursor is not { } time || time < View.Range.Start || time > View.Range.End || canvas.ActualWidth < 20) return;
+        cursorLine.X1 = cursorLine.X2 = 4 + (time - View.Range.Start).TotalMilliseconds / View.Range.Duration.TotalMilliseconds * (canvas.ActualWidth - 8);
+        cursorLine.Y1 = 0; cursorLine.Y2 = canvas.Height - 20; cursorLine.Visibility = Visibility.Visible;
     }
     private void Export(string format)
     {
