@@ -42,4 +42,14 @@ public static class PlotData
                 s.Device.Name, s.MetricKey, row.Unit, s.Value?.ToString("R", CultureInfo.InvariantCulture) ?? "" }.Select(Csv)));
         }
     }
+
+    public static void WriteText(TextWriter writer, IEnumerable<PlotExportRow> rows)
+    {
+        writer.WriteLine("GPU Monitor measured chart data · UTC timestamps · raw source units");
+        foreach (var row in rows)
+        {
+            var s = row.Sample;
+            writer.WriteLine($"{s.Time:O} | {s.Device.Source} | {s.Device.Name} [{s.Device.Id}] | {s.MetricKey} = {s.Value?.ToString("R", CultureInfo.InvariantCulture) ?? "N/A"} {row.Unit}");
+        }
+    }
 }

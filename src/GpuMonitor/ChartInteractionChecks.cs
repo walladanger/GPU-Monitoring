@@ -124,7 +124,22 @@ internal static class ChartInteractionChecks
                 Require(!follower.IsViewPaused, "Disabled synchronization still propagated a pause.");
                 linked.Remove(plot); linked.Remove(follower);
                 Require(linked.Count == 0, "Unloaded charts retained synchronization subscriptions.");
+                var timeline = new EventTimelinePanel(); root.Children.Clear(); root.Children.Add(timeline);
+                var trace = new TelemetryEvent("fixture", "span", now.AddSeconds(-10), "tool.finished", CorrelationId: "trace-1", Duration: TimeSpan.FromSeconds(20), Name: "synthetic-tool");
+                timeline.Update([sources[0] with { EventHistory = [trace] }], now, 5);
+                root.Measure(new Size(1200, 650)); root.Arrange(new Rect(0, 0, 1200, 650)); root.UpdateLayout();
+                Require(timeline.View.Entries.Single().Start == now.AddSeconds(-30), "Native timeline did not show the measured span duration.");
+                timeline.SetRange(new(now.AddSeconds(-25), now.AddSeconds(-5)));
+                Require(timeline.View.Range.Duration == TimeSpan.FromSeconds(20) && timeline.View.Entries.Count == 1, "Timeline did not retain overlapping events under shared zoom limits.");
+                timeline.Update([sources[0] with { EventHistory = [] }], later, 5);
+                Require(timeline.View.Entries.Count == 1, "Paused event timeline lost its frozen metadata.");
+                timeline.SetCursor(now.AddSeconds(-15));
+                var timelineBitmap = new RenderTargetBitmap(1200, 650, 96, 96, PixelFormats.Pbgra32); timelineBitmap.Render(root);
+                var timelineEncoder = new PngBitmapEncoder(); timelineEncoder.Frames.Add(BitmapFrame.Create(timelineBitmap));
+                using (var stream = File.Create(Path.Combine(output, "activity-timeline.png"))) timelineEncoder.Save(stream);
+                timeline.SetRange(null); Require(timeline.View.Entries.Count == 0, "Timeline did not resume the latest event snapshot.");
                 File.AppendAllText(Path.Combine(output, "charts-result.txt"), "\nPASS: Cross-chart exact cursors, missing-value inspection, zoom/pan/pause/reset, frozen independent samples, opt-out and subscription cleanup.");
+                File.AppendAllText(Path.Combine(output, "charts-result.txt"), "\nPASS: Native activity timeline span geometry, overlapping range, independent frozen event metadata, shared cursor and reset. Synthetic fixture capture: activity-timeline.png.");
                 window.Close(); app.Shutdown();
             }
             catch (Exception error) { Fail(error); }
