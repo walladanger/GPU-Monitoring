@@ -62,7 +62,7 @@ public sealed partial class OverviewWindow : Window
         var workspace = new Grid(); workspace.ColumnDefinitions.Add(rail); workspace.ColumnDefinitions.Add(new()); Grid.SetRow(workspace, 1); root.Children.Add(workspace);
         var sidebar = new DockPanel { Background = OverviewTheme.Gradient("#15232E", "#101E29"), Margin = new(0, 1, 0, 0) };
         var quick = OverviewTheme.Card(summary, new(12)); quick.Margin = new(8); DockPanel.SetDock(quick, Dock.Bottom); sidebar.Children.Add(quick);
-        sidebar.Children.Add(navigation); workspace.Children.Add(sidebar); BuildNavigation();
+        sidebar.Children.Add(new ScrollViewer { Content = navigation, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }); workspace.Children.Add(sidebar); BuildNavigation();
         scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = body, Padding = new(17, 16, 2, 16) };
         Grid.SetColumn(scroll, 1); workspace.Children.Add(scroll);
         empty.Margin = new(0, 30, 0, 30); body.Children.Add(empty); body.Children.Add(gpuGrid);
@@ -157,6 +157,10 @@ public sealed partial class OverviewWindow : Window
         Add("\uE7F4", "GPU Details", () => { details = true; BuildNavigation(); Render(viewTime); }, details);
         Add("\uE71D", "Processes", () => customWorkspace.OpenPicker("Process"), false);
         Add("\uE9D9", "System", () => hardwareRow.BringIntoView(), false);
+        Add("\uE950", "CPU", () => customWorkspace.OpenPicker("CPU"), false);
+        Add("\uE964", "RAM", () => customWorkspace.OpenPicker("RAM"), false);
+        Add("\uE839", "Network", () => customWorkspace.OpenPicker("Network"), false);
+        Add("\uEDA2", "Storage", () => customWorkspace.OpenPicker("Disk"), false);
         Add("\uE9D5", "Activity", () => activityTimeline.BringIntoView(), false);
         Add("\uE713", "Settings", OpenSettings, false);
         void Add(string glyph, string label, Action action, bool selected)
@@ -174,6 +178,7 @@ public sealed partial class OverviewWindow : Window
     private void OpenSettings()
     {
         var menu = OverviewTheme.Menu();
+        menu.Items.Add(OverviewTheme.MenuCommand("Monitoring sources…", () => new SourceSettingsWindow(this, settings, QuickSources, Save).ShowDialog()));
         var synchronized = OverviewTheme.MenuCommand("Synchronize chart cursors and timelines", () =>
         { settings.SynchronizeCharts = !settings.SynchronizeCharts; ChartSynchronization.Enabled = settings.SynchronizeCharts; Save(); });
         synchronized.IsCheckable = true; synchronized.IsChecked = settings.SynchronizeCharts; menu.Items.Add(synchronized);
