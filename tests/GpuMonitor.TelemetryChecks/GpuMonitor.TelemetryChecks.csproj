@@ -24,6 +24,7 @@
     <Compile Include="../../src/GpuMonitor/RuntimeMetricsCollector.cs" Link="RuntimeMetricsCollector.cs" />
     <Compile Include="../../src/GpuMonitor/PrometheusText.cs" Link="PrometheusText.cs" />
     <Compile Include="../../src/GpuMonitor/ProcessCollectors.cs" Link="ProcessCollectors.cs" />
+    <Compile Include="../../src/GpuMonitor/GpuProcessProjection.cs" Link="GpuProcessProjection.cs" />
     <Compile Include="../../src/GpuMonitor/DiskCollector.cs" Link="DiskCollector.cs" />
     <Compile Include="../../src/GpuMonitor/SystemCollectors.cs" Link="SystemCollectors.cs" />
     <Compile Include="../../src/GpuMonitor/HeadlessCollector.cs" Link="HeadlessCollector.cs" />

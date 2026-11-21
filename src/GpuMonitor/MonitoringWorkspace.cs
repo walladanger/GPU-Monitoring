@@ -12,6 +12,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     private readonly WorkspacePresetStore store;
     private readonly WrapPanel panels = new();
     private readonly Dictionary<string, WorkspaceChartCard> cards = [];
+    private readonly Dictionary<string, (Window Window, WorkspaceChartCard Card)> popouts = [];
     private WorkspaceLayout? previous;
     private DateTimeOffset time = DateTimeOffset.UtcNow;
     private int minutes = 5;
@@ -57,11 +58,23 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     {
         WorkspacePresetStore.Validate(layout);
         previous = Layout; Layout = layout;
+        // Detached panels are independently rendered views, sharing provider snapshots but not collectors.
+        foreach (var entry in popouts.ToArray())
+        {
+            var updated = layout.Panels.FirstOrDefault(p => p.Id == entry.Key);
+            if (updated == null) { entry.Value.Window.Close(); continue; }
+            if (ReferenceEquals(updated, entry.Value.Card.Specification)) continue;
+            var replacement = MakeCard(updated);
+            replacement.ProcessExpanded = entry.Value.Card.ProcessExpanded;
+            entry.Value.Window.Content = new ScrollViewer
+            { Content = replacement, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new(14) };
+            entry.Value.Window.Title = updated.Title + " · GPU Monitor";
+            popouts[entry.Key] = (entry.Value.Window, replacement);
+        }
         panels.Children.Clear(); cards.Clear();
         foreach (var panel in layout.Panels)
         {
-            var card = new WorkspaceChartCard(panel, () => OpenPanelMenu(panel.Id)) { Focusable = true };
-            card.CursorMoved += value => CursorMoved?.Invoke(value);
+            var card = MakeCard(panel);
             card.MouseLeftButtonDown += (_, _) => { if (!card.IsKeyboardFocusWithin) card.Focus(); };
             card.PreviewKeyDown += (_, e) =>
             {
@@ -80,6 +93,46 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         AddButton.IsEnabled = layout.Panels.Count < 64;
         Refresh(sources(), time, minutes); Reflow(); LayoutChanged?.Invoke();
     }
+
+    private WorkspaceChartCard MakeCard(WorkspacePanel panel)
+    {
+        var card = new WorkspaceChartCard(panel, () => OpenPanelMenu(panel.Id),
+            () => Edit(Layout.Panels.Single(p => p.Id == panel.Id)), () => OpenPanelWindow(panel.Id))
+            { Focusable = true };
+        card.CursorMoved += value => CursorMoved?.Invoke(value);
+        return card;
+    }
+
+    private void OpenPanelWindow(string id)
+    {
+        if (popouts.TryGetValue(id, out var existing))
+        {
+            existing.Window.Activate(); return;
+        }
+        var panel = Layout.Panels.Single(p => p.Id == id);
+        var card = MakeCard(panel);
+        var window = new Window
+        {
+            Owner = Window.GetWindow(this), Title = panel.Title + " · GPU Monitor",
+            Width = 820, Height = 540, MinWidth = 340, MinHeight = 260,
+            Background = OverviewTheme.Canvas, Foreground = Brushes.White,
+            FontFamily = new FontFamily("Segoe UI"), ResizeMode = ResizeMode.CanResize,
+            Content = new ScrollViewer
+            { Content = card, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new(14) }
+        };
+        window.SizeChanged += (_, _) =>
+        {
+            if (popouts.TryGetValue(id, out var active))
+                active.Card.FitDetached(window.ActualWidth, window.ActualHeight);
+        };
+        window.Closed += (_, _) => popouts.Remove(id);
+        popouts.Add(id, (window, card));
+        card.Refresh(sources(), time, minutes);
+        window.Show();
+    }
+
+    internal int OpenPanelWindowCount => popouts.Count;
+    internal void OpenPanelWindowForTest(string id) => OpenPanelWindow(id);
 
     internal void Remove(string id) => ApplyLayout(Layout with { Panels = Layout.Panels.Where(p => p.Id != id).ToArray() });
     internal void Move(string id, int direction)
@@ -104,7 +157,8 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     {
         var panel = Layout.Panels.Single(p => p.Id == id);
         var menu = OverviewTheme.Menu();
-        menu.Items.Add(OverviewTheme.MenuCommand("Edit sensors / rename…   Ctrl+E", () => Edit(panel)));
+        menu.Items.Add(OverviewTheme.MenuCommand("Open in new window", () => OpenPanelWindow(id)));
+        menu.Items.Add(OverviewTheme.MenuCommand("Select graph / sensors…   Ctrl+E", () => Edit(panel)));
         menu.Items.Add(OverviewTheme.MenuCommand("Move earlier   Alt+Up", () => Move(id, -1)));
         menu.Items.Add(OverviewTheme.MenuCommand("Move later   Alt+Down", () => Move(id, 1)));
         var width = new MenuItem { Header = "Width" }; var height = new MenuItem { Header = "Height" };
@@ -137,8 +191,9 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     {
         time = now; minutes = windowMinutes;
         foreach (var card in cards.Values) card.Refresh(snapshots, now, windowMinutes);
+        foreach (var item in popouts.Values) item.Card.Refresh(snapshots, now, windowMinutes);
     }
-    public void SetCursor(DateTimeOffset? value) { foreach (var plot in Plots) plot.SetCursor(value); }
+    public void SetCursor(DateTimeOffset? value) { foreach (var plot in Plots.Concat(popouts.Values.Select(p => p.Card.Plot).OfType<TelemetryPlot>())) plot.SetCursor(value); }
     private void Reflow()
     {
         double width = panels.ActualWidth; if (width <= 0) return;
