@@ -89,6 +89,17 @@ internal static class WorkspaceChecks
                 workspace.Move("cpu-panel", -1);
                 if (workspace.Layout.Panels[0].Id != "cpu-panel") throw new InvalidOperationException("Panel reorder failed.");
                 workspace.PutPanel(gpu with { Title = "Selected GPU usage", WidthSlots = 2, HeightRows = 1 });
+                workspace.OpenPanelWindowForTest(gpu.Id);
+                if (workspace.OpenPanelWindowCount != 1) throw new InvalidOperationException("Pop-out did not open its independent monitoring window.");
+                var detachedWindow = app.Windows.OfType<Window>().Single(w => w.Title.StartsWith("Selected GPU usage ·", StringComparison.Ordinal));
+                double originalWidth = detachedWindow.Width;
+                detachedWindow.Width = originalWidth + 100;
+                if (detachedWindow.Width <= originalWidth) throw new InvalidOperationException("Pop-out did not allow live window resizing.");
+                workspace.OpenPanelWindowForTest(gpu.Id);
+                if (workspace.OpenPanelWindowCount != 1) throw new InvalidOperationException("Repeated pop-out action duplicated the existing window.");
+                detachedWindow.Close();
+                if (workspace.OpenPanelWindowCount != 0 || workspace.PanelCount != 2)
+                    throw new InvalidOperationException("Closing a pop-out changed the main workspace.");
                 workspace.PresetsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 var presetMenu = workspace.PresetsButton.ContextMenu!; presetMenu.IsOpen = false;
                 Exception? nameError = null;
