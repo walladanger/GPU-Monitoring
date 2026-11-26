@@ -22,7 +22,7 @@ public static class EventTimeline
         string Lane(TelemetryEvent e) => e.Source + " · " + (e.Source == "nvidia-processes" ? e.DeviceId ?? e.Id : e.CorrelationId ?? e.DeviceId ?? "Events");
         var lanes = new List<string>();
         var entries = new List<TimelineEntry>();
-        foreach (var group in matching.GroupBy(Lane))
+        foreach (var group in matching.GroupBy(Lane).Take(24))
         {
             int firstRow = lanes.Count;
             var rowEnds = new List<DateTimeOffset>();
