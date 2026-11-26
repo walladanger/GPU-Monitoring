@@ -17,6 +17,8 @@ public sealed partial class OverviewWindow : Window
     private IReadOnlyList<ProviderSnapshot>? workspaceFixtures;
     private readonly Grid root;
     private readonly Dictionary<string, GpuOverviewCard> cards = [];
+    private readonly Dictionary<string, PanelSurface> gpuSurfaces = [];
+    private readonly List<PanelSurface> surfaces = [];
     private readonly Dictionary<string, string> deviceColors = [];
     private int nextColor;
     private readonly WrapPanel gpuGrid = new();
@@ -35,7 +37,8 @@ public sealed partial class OverviewWindow : Window
     private readonly System.Windows.Forms.NotifyIcon? tray;
     private readonly bool savePreferences, usesFixtureData;
     private bool reading, closed, closing, paused, details, collapsed;
-    private string[] comparisonIds = [];
+    private readonly GpuSensorPanel comparisonPanel;
+    private readonly GpuPanelSettings comparisonSettings;
     private DateTimeOffset viewTime;
     private readonly List<Button> rangeButtons = [];
     private static readonly string[] Colors = ["#2B82F8", "#A66CF2", "#33DF32", "#FFBA4D", "#F45A5A", "#39BCD2", "#DBCE32", "#E977BD"];
@@ -43,11 +46,14 @@ public sealed partial class OverviewWindow : Window
     public OverviewWindow(bool startMonitoring = true, CollectorConfiguration? configuration = null, DashboardTelemetry? telemetry = null, string? workspaceDirectory = null, string? historyDirectory = null, Settings? preferences = null, bool fixtureData = false)
     {
         settings = preferences ?? (startMonitoring ? Settings.Load() : new Settings()); settings.Normalize(); savePreferences = startMonitoring && preferences == null; usesFixtureData = !startMonitoring || fixtureData;
+        OverviewTheme.ApplyAccent(settings.AccentColor);
         historyPath = historyDirectory == null ? Settings.HistoryPath : Path.Combine(historyDirectory, "telemetry.sqlite");
+        DevelopmentLog.Write("window", "Creating overview and panel surfaces");
         Title = "GPU Monitor"; Width = 1536; Height = 1024; MinWidth = 680; MinHeight = 540;
         Background = OverviewTheme.Canvas; Foreground = Brushes.White; FontFamily = new("Segoe UI");
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.CanResize;
         WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 0, ResizeBorderThickness = new(6), GlassFrameThickness = new(0), CornerRadius = new(0) });
+        Dispatcher.UnhandledException += (_, e) => DevelopmentLog.Write("ui-error", e.Exception.ToString());
         root = new Grid { Background = OverviewTheme.Canvas }; root.RowDefinitions.Add(new() { Height = new(72) }); root.RowDefinitions.Add(new()); Content = root;
         root.Children.Add(CreateHeader());
         var workspace = new Grid(); workspace.ColumnDefinitions.Add(rail); workspace.ColumnDefinitions.Add(new()); Grid.SetRow(workspace, 1); root.Children.Add(workspace);
@@ -57,9 +63,8 @@ public sealed partial class OverviewWindow : Window
         scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = body, Padding = new(17, 16, 2, 16) };
         Grid.SetColumn(scroll, 1); workspace.Children.Add(scroll);
         empty.Margin = new(0, 30, 0, 30); body.Children.Add(empty); body.Children.Add(gpuGrid);
-        hardwareRow.Children.Add(cpuCard); hardwareRow.Children.Add(diskCard); body.Children.Add(hardwareRow);
-        cpuCard.Plot.CursorMoved += SetCursor; diskCard.Plot.CursorMoved += SetCursor;
-        customWorkspace = new(WorkspaceSources, workspaceDirectory); customWorkspace.CursorMoved += SetCursor; body.Children.Add(customWorkspace);
+        hardwareRow.Children.Add(Surface("CPU", cpuCard)); hardwareRow.Children.Add(Surface("Disk", diskCard)); body.Children.Add(hardwareRow);
+        customWorkspace = new(WorkspaceSources, workspaceDirectory); body.Children.Add(customWorkspace);
         customWorkspace.LayoutChanged += () => customWorkspace.Visibility = customWorkspace.PanelCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         var comparisonContent = new StackPanel();
         var comparisonHeading = new DockPanel { Margin = new(0, 0, 0, 8) };
@@ -70,17 +75,20 @@ public sealed partial class OverviewWindow : Window
             button.Padding = new(8, 3, 8, 3); button.FontSize = 11; button.Tag = minutes; rangeButtons.Add(button); ranges.Children.Add(button);
         }
         comparisonHeading.Children.Add(OverviewTheme.Text("GPU Utilization (Selected GPUs)", 15)); comparisonContent.Children.Add(comparisonHeading);
-        comparisonContent.Children.Add(comparison); comparisonContent.Children.Add(legend);
-        var compareCard = OverviewTheme.Card(comparisonContent); compareCard.Margin = new(0, 0, 14, 14); body.Children.Add(compareCard);
-        OverviewTheme.PlotMenu(comparison, "%", "gpu-comparison"); comparison.CursorMoved += SetCursor;
+        if (!settings.GpuPanels.TryGetValue("comparison", out var savedComparison)) settings.GpuPanels["comparison"] = savedComparison = new() { FollowGpuInventory = true };
+        comparisonSettings = savedComparison;
+        comparisonPanel = new(comparison, comparisonSettings, Save);
+        comparisonContent.Children.Add(comparisonPanel); comparisonContent.Children.Add(legend);
+        var compareCard = OverviewTheme.Card(comparisonContent); compareCard.Margin = new(0, 0, 14, 14); body.Children.Add(Surface("GPU comparison", compareCard));
+        OverviewTheme.PlotMenu(comparison, "%", "gpu-comparison");
         var footer = OverviewTheme.Text(!usesFixtureData ? "Read-only monitoring · Right-click any graph to inspect or export its source data" : "Synthetic fixture data · actual Windows app render · not live hardware readings", 11, OverviewTheme.Muted);
         footer.TextWrapping = TextWrapping.Wrap; body.Children.Add(footer);
         gpuGrid.SizeChanged += (_, _) => Reflow(); hardwareRow.SizeChanged += (_, _) => Reflow();
         timer.Interval = TimeSpan.FromSeconds(settings.RefreshSeconds); timer.Tick += (_, _) => Render(DateTimeOffset.UtcNow);
         if (startMonitoring)
         {
-            // Preserve NVIDIA-only normal launch. Extra hardware/runtime sources require --sources.
-            monitoring = telemetry ?? (configuration == null ? new DashboardTelemetry([new NvidiaCollector()]) : DashboardTelemetry.Create(configuration));
+            // One shared NVIDIA/process collector pair; optional hardware/runtime sources require --sources.
+            monitoring = telemetry ?? (configuration == null ? new DashboardTelemetry([new NvidiaCollector(), new NvidiaProcessCollector()]) : DashboardTelemetry.Create(configuration));
             tray = new System.Windows.Forms.NotifyIcon { Text = "GPU Monitor", Icon = System.Drawing.SystemIcons.Application, Visible = true };
             InitializeTray();
             tray.DoubleClick += (_, _) => Dispatcher.Invoke(Restore);
@@ -101,7 +109,7 @@ public sealed partial class OverviewWindow : Window
             catch (Exception error) { System.Diagnostics.Trace.TraceError(error.ToString()); }
             finally { closing = true; _ = Dispatcher.BeginInvoke(new Action(Close)); }
         };
-        Closed += (_, _) => { closed = true; timer.Stop(); quickView?.Dispose(); tray?.Dispose(); };
+        Closed += (_, _) => { closed = true; timer.Stop(); foreach (var surface in surfaces) surface.CloseDetached(); foreach (var card in cards.Values) card.CloseDetached(); comparisonPanel.CloseDetached(); quickView?.Dispose(); tray?.Dispose(); };
     }
 
     private UIElement CreateHeader()
@@ -109,21 +117,24 @@ public sealed partial class OverviewWindow : Window
         var bar = new DockPanel { Background = OverviewTheme.Gradient("#14212B", "#0B1923"), LastChildFill = true, Margin = new(0, 0, 0, 1) };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new(8) };
         health.FontSize = 11; health.Margin = new(10, 0, 12, 0); actions.Children.Add(health);
-        var settingsButton = OverviewTheme.Command("⋮", OpenSettings, "Monitoring settings"); settingsButton.ToolTip = "Monitoring settings"; settingsButton.FontSize = 23;
+        var settingsButton = OverviewTheme.Command("Settings", OpenSettings, "Monitoring settings"); settingsButton.ToolTip = "Monitoring settings"; settingsButton.FontSize = 12;
         settingsButton.Background = Brushes.Transparent; settingsButton.BorderThickness = new(0); actions.Children.Add(settingsButton);
         DockPanel.SetDock(actions, Dock.Right); bar.Children.Add(actions);
-        var chrome = new StackPanel { Width = 72, Margin = new(0, 8, 0, 0) };
-        var dots = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-        foreach (var item in new[] { ("#F55050", "Close", (Action)Close), ("#F7BD40", "Minimize", (Action)(() => WindowState = WindowState.Minimized)),
-            ("#26CA54", "Maximize or restore", (Action)(() => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized)) })
-        {
-            var dot = OverviewTheme.Command("", item.Item3, item.Item2); dot.Width = dot.Height = 13; dot.Padding = new(0); dot.Margin = new(3, 4, 3, 3);
-            dot.Background = OverviewTheme.Brush(item.Item1); dot.BorderThickness = new(0); dot.ToolTip = item.Item2; dots.Children.Add(dot);
+        var windowButtons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Top };
+        var minimize = OverviewTheme.Command("—  Minimize", () => WindowState = WindowState.Minimized);
+        var maximize = OverviewTheme.Command("□  Maximize", () => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized);
+        var close = OverviewTheme.Command("×  Close", Close);
+        foreach (var button in new[] { minimize, maximize, close }) {
+            button.Padding = new(10, 10, 10, 10); button.Margin = new(1); button.FontSize = 11;
+            windowButtons.Children.Add(button);
         }
-        chrome.Children.Add(dots);
-        var collapse = OverviewTheme.Command("‹", () => { collapsed = !collapsed; rail.Width = new(collapsed ? 72 : 222); BuildNavigation(); }, "Collapse or expand navigation");
-        collapse.Background = Brushes.Transparent; collapse.BorderThickness = new(0); collapse.FontSize = 23; collapse.Padding = new(0); collapse.Height = 26; chrome.Children.Add(collapse);
-        bar.Children.Add(chrome);
+        StateChanged += (_, _) => {
+            maximize.Content = WindowState == WindowState.Maximized ? "❐  Restore" : "□  Maximize";
+            System.Windows.Automation.AutomationProperties.SetName(maximize, WindowState == WindowState.Maximized ? "Restore" : "Maximize");
+        };
+        DockPanel.SetDock(windowButtons, Dock.Right); bar.Children.Insert(0, windowButtons);
+        var collapse = OverviewTheme.Command("☰  Menu", () => { collapsed = !collapsed; rail.Width = new(collapsed ? 72 : 222); BuildNavigation(); }, "Collapse or expand navigation");
+        collapse.VerticalAlignment = VerticalAlignment.Center; bar.Children.Add(collapse);
         var title = new StackPanel { Margin = new(8, 8, 0, 8) }; var name = OverviewTheme.Text("GPU Monitor", 21); name.FontWeight = FontWeights.SemiBold; title.Children.Add(name);
         title.Children.Add(OverviewTheme.Text("Real-time GPU Monitoring", 13, OverviewTheme.Muted));
         title.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2) WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; else DragMove(); };
@@ -142,17 +153,22 @@ public sealed partial class OverviewWindow : Window
         void Add(string glyph, string label, Action action, bool selected)
         {
             var button = OverviewTheme.Command(label, action); button.ToolTip = label; button.Margin = new(8, 4, 8, 4); button.Height = 48; button.HorizontalContentAlignment = HorizontalAlignment.Left;
-            button.Background = selected ? OverviewTheme.Gradient("#1E5892", "#134578") : Brushes.Transparent; button.BorderThickness = new(0);
+            button.Background = Brushes.Transparent; button.BorderThickness = new(0);
+            if (selected) button.SetResourceReference(Control.BackgroundProperty, "ActionSelection");
             var row = new StackPanel { Orientation = Orientation.Horizontal };
             var icon = OverviewTheme.Text(glyph, 18, selected ? Brushes.White : OverviewTheme.Muted); icon.FontFamily = new("Segoe MDL2 Assets"); row.Children.Add(icon);
             if (!collapsed) { var text = OverviewTheme.Text(label); text.Margin = new(14, 0, 0, 0); row.Children.Add(text); }
-            button.Content = row; navigation.Children.Add(button);
+            button.Content = row; OverviewTheme.SetSelected(button, selected); navigation.Children.Add(button);
         }
     }
 
     private void OpenSettings()
     {
         var menu = OverviewTheme.Menu();
+        menu.Items.Add(OverviewTheme.MenuCommand("Open development log", () => {
+            DevelopmentLog.Write("user", "Opened development log");
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("notepad.exe") { ArgumentList = { DevelopmentLog.Path }, UseShellExecute = false });
+        }));
         menu.Items.Add(OverviewTheme.MenuCommand("Add monitoring panel…", () => customWorkspace.OpenPicker()));
         menu.Items.Add(OverviewTheme.MenuCommand("Workspace presets…", () => customWorkspace.PresetsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))));
         menu.Items.Add(OverviewTheme.MenuCommand("Tray quick-view settings…", OpenTraySettings));
@@ -170,11 +186,17 @@ public sealed partial class OverviewWindow : Window
             item.IsCheckable = true; item.IsChecked = settings.RefreshSeconds == seconds; refresh.Items.Add(item);
         }
         menu.Items.Add(refresh);
+        var accent = new MenuItem { Header = "Accent color" };
+        foreach (var choice in new[] { ("Blue", "#229DFF"), ("Green", "#35E544"), ("Purple", "#A66CF2"), ("Amber", "#FFBA4D"), ("Teal", "#39BCD2") }) {
+            var item = OverviewTheme.MenuCommand(choice.Item1, () => { settings.AccentColor = choice.Item2; OverviewTheme.ApplyAccent(choice.Item2); Save(); });
+            item.IsCheckable = true; item.IsChecked = settings.AccentColor == choice.Item2; accent.Items.Add(item);
+        }
+        menu.Items.Add(accent);
         var minimize = OverviewTheme.MenuCommand("Minimize to tray", () => { settings.MinimizeToTray = !settings.MinimizeToTray; Save(); });
         minimize.IsCheckable = true; minimize.IsChecked = settings.MinimizeToTray; menu.Items.Add(minimize);
         menu.PlacementTarget = this; menu.IsOpen = true;
     }
-    private void Save() { if (!savePreferences) return; try { settings.Save(); } catch (Exception error) { MessageBox.Show(this, error.Message, "Settings could not be saved"); } }
+    private void Save() { DevelopmentLog.Write("settings", "Panel or display preferences changed"); if (!savePreferences) return; try { settings.Save(); } catch (Exception error) { MessageBox.Show(this, error.Message, "Settings could not be saved"); } }
     private void Restore() { quickView?.Hide(); Show(); WindowState = WindowState.Normal; Activate(); }
 
     private async Task UpdateMonitoringAsync()
@@ -205,32 +227,39 @@ public sealed partial class OverviewWindow : Window
         var session = snapshots.Single(s => s.Source == NvidiaTelemetry.SourceId);
         var readings = session.Current == null ? Array.Empty<GpuReading>() : NvidiaSnapshot.Readings(session.Current).ToArray();
         var ids = readings.Select(g => g.Id).ToHashSet();
-        foreach (var id in cards.Keys.Where(id => !ids.Contains(id)).ToArray()) { gpuGrid.Children.Remove(cards[id]); cards.Remove(id); deviceColors.Remove(id); }
+        if (!ids.SetEquals(cards.Keys)) DevelopmentLog.Write("inventory", $"GPU panel inventory changed: {cards.Count} -> {ids.Count}; health={session.Health}");
+        foreach (var id in cards.Keys.Where(id => !ids.Contains(id)).ToArray()) { cards[id].CloseDetached(); gpuSurfaces[id].CloseDetached(); surfaces.Remove(gpuSurfaces[id]); gpuGrid.Children.Remove(gpuSurfaces[id]); gpuSurfaces.Remove(id); cards.Remove(id); deviceColors.Remove(id); }
         foreach (var gpu in readings)
         {
             if (!cards.TryGetValue(gpu.Id, out var card))
             {
                 deviceColors[gpu.Id] = Colors[nextColor++ % Colors.Length];
-                cards[gpu.Id] = card = new(); gpuGrid.Children.Add(card);
-                foreach (var plot in card.Plots) plot.CursorMoved += SetCursor;
+                GpuPanelSettings Panel(string key, string sensor) {
+                    string id = gpu.Id + "/" + key;
+                    if (!settings.GpuPanels.TryGetValue(id, out var value)) settings.GpuPanels[id] = value = new() { Sensor = sensor, Minutes = settings.WindowMinutes };
+                    return value;
+                }
+                cards[gpu.Id] = card = new(Panel("usage", "utilization.gpu"), Save);
+                gpuSurfaces[gpu.Id] = Surface("GPU " + gpu.Index, card, gpu.Id,
+                    [new(NvidiaTelemetry.SourceId, gpu.Id, "utilization.gpu")]);
+                gpuGrid.Children.Add(gpuSurfaces[gpu.Id]);
             }
-            card.Update(gpu, session, settings.WindowMinutes, now, details);
+            card.Update(gpu, session, settings.WindowMinutes, now, details, snapshots);
         }
+        foreach (var surface in surfaces) surface.Refresh(snapshots, now, settings.WindowMinutes);
         // Reorder existing visuals to match the current display indices without changing UUID history.
         for (int i = 0; i < readings.Length; i++)
-            if (gpuGrid.Children[i] != cards[readings[i].Id]) { gpuGrid.Children.Remove(cards[readings[i].Id]); gpuGrid.Children.Insert(i, cards[readings[i].Id]); }
-        if (!comparisonIds.SequenceEqual(readings.Select(g => g.Id)))
-        {
-            comparisonIds = readings.Select(g => g.Id).ToArray();
-            comparison.SetSeries(readings.Select(g => ($"GPU {g.Index}", deviceColors[g.Id])).ToArray());
-        }
-        comparison.Update(readings.Select(g => session.Series(g.Id, "utilization.gpu")).ToArray(), now, settings.WindowMinutes);
+            if (gpuGrid.Children[i] != gpuSurfaces[readings[i].Id]) { gpuGrid.Children.Remove(gpuSurfaces[readings[i].Id]); gpuGrid.Children.Insert(i, gpuSurfaces[readings[i].Id]); }
+        if (readings.Length > 0) {
+            if (comparisonSettings.FollowGpuInventory) comparisonSettings.Sensors = readings.Take(16).Select(g => new WorkspaceSeries(NvidiaTelemetry.SourceId, g.Id, "utilization.gpu")).ToList();
+            comparisonPanel.Update(readings[0], session, snapshots, now);
+        } else { comparison.SetSeries([]); comparisonPanel.CloseDetached(); }
         comparison.Opacity = session.Health == ProviderHealth.Stale ? .5 : 1;
         legend.Children.Clear();
-        for (int i = 0; i < readings.Length; i++)
-        {
-            comparison.SetName(i, $"GPU {readings[i].Index}");
-            var label = OverviewTheme.Text($"● GPU {readings[i].Index}", 12, OverviewTheme.Brush(deviceColors[readings[i].Id]));
+        string[] panelColors = ["#33DF32", "#2B82F8", "#A66CF2", "#FFBA4D", "#39BCD2", "#E977BD", "#F45A5A", "#DBCE32"];
+        for (int i = 0; i < comparison.SeriesCount; i++) {
+            var parts = comparison.SeriesNames[i].Split(" · ");
+            var label = OverviewTheme.Text("● " + parts[0] + (parts.Length > 1 ? " · " + parts[^1] : ""), 12, OverviewTheme.Brush(panelColors[i % panelColors.Length]));
             label.Margin = new(12, 0, 12, 0); legend.Children.Add(label);
         }
         health.Text = paused ? "● Paused" : session.Health switch { ProviderHealth.Live => "● Connected", ProviderHealth.Stale => "● Telemetry unavailable", _ => "● Discovering…" };
@@ -240,21 +269,39 @@ public sealed partial class OverviewWindow : Window
         empty.Visibility = readings.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         empty.Text = session.Health == ProviderHealth.Starting ? "Discovering NVIDIA GPUs…" : session.Health == ProviderHealth.Stale ? "NVIDIA telemetry unavailable. Check the driver; retrying automatically." : "No NVIDIA GPUs detected.";
         summary.Text = collapsed ? $"{readings.Length} GPUs" : $"{readings.Length} GPUs detected\nLast update  {session.LastSuccess?.ToLocalTime():HH:mm:ss}\n{(paused ? "Paused" : session.Health.ToString())}";
-        foreach (var button in rangeButtons) button.Background = (int)button.Tag == settings.WindowMinutes ? OverviewTheme.Brush("#184880") : OverviewTheme.Surface;
+        foreach (var button in rangeButtons) OverviewTheme.SetSelected(button, (int)button.Tag == settings.WindowMinutes);
         cpuCard.Update(snapshots, now, settings.WindowMinutes); diskCard.Update(snapshots, now, settings.WindowMinutes);
         customWorkspace.Visibility = customWorkspace.PanelCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         customWorkspace.Refresh(snapshots, now, settings.WindowMinutes);
         Reflow();
     }
+    private PanelSurface Surface(string title, FrameworkElement view, string? identity = null, IReadOnlyList<WorkspaceSeries>? defaults = null) {
+        string key = "surface/" + (identity ?? title);
+        if (!settings.GpuPanels.TryGetValue(key, out var preferences)) settings.GpuPanels[key] = preferences = new();
+        var surface = new PanelSurface(title, view, preferences, WorkspaceSources, Save, defaults);
+        surface.Resized += Reflow; surfaces.Add(surface); return surface;
+    }
     private void Reflow()
     {
         double width = gpuGrid.ActualWidth; if (width <= 0) return;
         int columns = Math.Min(Math.Max(1, cards.Count), Math.Max(1, (int)Math.Floor(width / 500)));
-        foreach (var card in cards.Values) card.Width = Math.Max(280, width / columns - 14);
+        FillRows(gpuSurfaces.Values.ToArray(), columns, width);
         int hardwareColumns = width >= 1000 ? 2 : 1;
-        cpuCard.Width = diskCard.Width = Math.Max(280, width / hardwareColumns - 14);
+        FillRows(hardwareRow.Children.Cast<PanelSurface>().ToArray(), hardwareColumns, width);
     }
-    private void SetCursor(DateTimeOffset? time) { comparison.SetCursor(time); foreach (var card in cards.Values) foreach (var plot in card.Plots) plot.SetCursor(time); customWorkspace.SetCursor(time); cpuCard.Plot.SetCursor(time); diskCard.Plot.SetCursor(time); }
+    private static void FillRows(PanelSurface[] panels, int columns, double width)
+    {
+        // Saved widths remain proportions, while each row fills the current viewport.
+        // Fill the last row too, instead of leaving an empty column beside its panels.
+        foreach (var row in panels.Chunk(columns)) {
+            double available = Math.Max(1, width - row.Length * 14);
+            double minimum = Math.Min(320, available / row.Length);
+            double extra = Math.Max(0, available - minimum * row.Length);
+            double total = row.Sum(panel => panel.PreferredWidth > 0 ? panel.PreferredWidth : 500);
+            foreach (var panel in row)
+                panel.Width = minimum + extra * (panel.PreferredWidth > 0 ? panel.PreferredWidth : 500) / total;
+        }
+    }
     private ProviderSnapshot FixtureSnapshot() => new(NvidiaTelemetry.SourceId, fixtureSession.Health, fixtureSession.Error,
         fixtureSession.LastSuccess, fixtureSession.Current, fixtureSession.HistorySnapshot(), fixtureSession.Definitions);
     private IReadOnlyList<ProviderSnapshot> WorkspaceSources() => monitoring?.Snapshot() ?? workspaceFixtures ?? [FixtureSnapshot()];
@@ -264,6 +311,15 @@ public sealed partial class OverviewWindow : Window
     internal void VerifyInventory(int expected)
     {
         if (cards.Count != expected || comparison.SeriesCount != expected) throw new InvalidOperationException("Overview must show exactly the detected GPU count.");
+    }
+    internal void VerifyResponsiveLayout()
+    {
+        foreach (var group in gpuSurfaces.Values.GroupBy(panel => Math.Round(panel.TranslatePoint(new Point(), gpuGrid).Y))) {
+            var row = group.ToArray();
+            double right = row.Max(panel => panel.TranslatePoint(new Point(), gpuGrid).X + panel.ActualWidth + panel.Margin.Right);
+            if (Math.Abs(right - gpuGrid.ActualWidth) > 2)
+                throw new InvalidOperationException($"GPU panels must fill each available row: {right} / {gpuGrid.ActualWidth}.");
+        }
     }
     internal IReadOnlyList<TelemetryPlot> VerifyPlots => cards.Values.SelectMany(c => c.Plots).ToArray();
     internal FrameworkElement VerificationRoot => root;

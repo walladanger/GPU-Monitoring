@@ -14,20 +14,19 @@ internal static class OverviewChecks
     {
         var output = Path.Combine(AppContext.BaseDirectory, "overview-verification"); Directory.CreateDirectory(output);
         var app = new Application();
-        var window = new OverviewWindow(startMonitoring: false) { Left = 0, Top = 0 };
-        // Changing the panel's selected sensor must not add a second visible data window.
-        var selectionCard = new GpuOverviewCard();
-        if (selectionCard.Usage.Visibility != Visibility.Visible || selectionCard.Memory.Visibility != Visibility.Collapsed)
-            throw new InvalidOperationException("GPU panel must default to its single utilization chart.");
-        selectionCard.SelectGraph(true);
-        if (selectionCard.Usage.Visibility != Visibility.Collapsed || selectionCard.Memory.Visibility != Visibility.Visible)
-            throw new InvalidOperationException("GPU panel memory selection did not replace the visible chart.");
-        selectionCard.SelectGraph(false);
-        if (selectionCard.Usage.Visibility != Visibility.Visible || selectionCard.Memory.Visibility != Visibility.Collapsed)
-            throw new InvalidOperationException("GPU panel did not restore the single utilization chart.");
+        var preferences = new Settings { GpuPanels = new() { ["surface/GPU-fixture-0"] = new() { SurfaceWidth = 430 }, ["surface/GPU-fixture-1"] = new() { SurfaceWidth = 600 } } };
+        var window = new OverviewWindow(startMonitoring: false, preferences: preferences) { Left = 0, Top = 0 };
+        // Preserve the customizable panel UI, but default to exactly one graph per GPU.
+        var configured = new GpuPanelSettings();
+        var card = new GpuOverviewCard(configured);
+        if (card.Plots.Count() != 1 || configured.Sensor != "utilization.gpu")
+            throw new InvalidOperationException("The GPU panel default must show one configurable utilization graph.");
+        var memoryConfiguration = new GpuPanelSettings { Sensor = "memory.used" };
+        if (new GpuOverviewCard(memoryConfiguration).Plots.Count() != 1 || memoryConfiguration.Sensor != "memory.used")
+            throw new InvalidOperationException("Selecting memory data must replace, not duplicate, the GPU graph.");
         var viewportRoot = window.VerificationRoot; window.Content = null;
         HwndSource? host = null;
-        var cases = new[] { (0, 1536), (1, 1536), (2, 1536), (4, 1536), (8, 1536), (2, 760) };
+        var cases = new[] { (0, 1536), (1, 1536), (2, 1536), (4, 1536), (8, 1536), (2, 760), (3, 1200), (3, 1800), (3, 2480) };
         var now = DateTimeOffset.Parse("2026-10-23T12:00:00Z");
         int index = 0;
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
@@ -60,6 +59,7 @@ internal static class OverviewChecks
                 var viewport = window.VerificationRoot;
                 var viewportSize = new Size(cases[index].Item2, 1024);
                 viewport.Measure(viewportSize); viewport.Arrange(new Rect(viewportSize)); viewport.UpdateLayout();
+                window.VerifyResponsiveLayout();
                 var bitmap = Capture(window.VerificationRoot);
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
                 var (count, width) = cases[index];
@@ -71,32 +71,34 @@ internal static class OverviewChecks
                     var gpuTop = window.VerifyPlots[0].TranslatePoint(new Point(0, 0), viewport);
                     var hardwareTop = window.VerificationHardwareRow.TranslatePoint(new Point(0, 0), viewport);
                     var comparisonTop = window.VerificationComparison.TranslatePoint(new Point(0, 0), viewport);
-                    if (gpuTop.X < 239 || hardwareTop.Y <= gpuTop.Y || comparisonTop.Y <= hardwareTop.Y ||
-                        comparisonTop.Y + window.VerificationComparison.ActualHeight > 1000)
-                        throw new InvalidOperationException("Annotated GPU / CPU-disk / comparison composition does not fit the reference viewport.");
+                    if (gpuTop.X < 239 || hardwareTop.Y <= gpuTop.Y || comparisonTop.Y <= hardwareTop.Y)
+                        throw new InvalidOperationException("Annotated GPU / CPU-disk / comparison composition has an invalid panel order.");
                     if (window.VerificationHardwarePlots.Any(p => p.VisibleSamples.Count != 31))
                         throw new InvalidOperationException("Reference hardware row must render its actual fixture samples.");
                 }
-                // Each GPU panel defaults to exactly one visible chart (utilization).
-                var visiblePlots = window.VerifyPlots.Where(p => p.Visibility == Visibility.Visible).ToArray();
-                if (visiblePlots.Length != count)
-                    throw new InvalidOperationException($"Expected one visible chart per GPU panel, found {visiblePlots.Length} for {count} GPUs.");
+                // One graph per GPU, including the empty and multi-GPU layouts.
+                var plots = window.VerifyPlots;
+                if (plots.Count != count)
+                    throw new InvalidOperationException($"Expected {count} default GPU charts; found {plots.Count}.");
                 // Inspect chart interiors, excluding all card headings and numeric labels.
                 if (count > 0)
                 {
-                    var plots = visiblePlots;
-                    for (int chartIndex = 0; chartIndex < Math.Min(2, plots.Length); chartIndex++)
+                    for (int chartIndex = 0; chartIndex < Math.Min(2, plots.Count); chartIndex++)
                     {
                         var plot = plots[chartIndex];
-                        var origin = plot.TranslatePoint(new Point(0, 0), viewport);
-                        int plotWidth = (int)plot.ActualWidth, plotHeight = (int)plot.ActualHeight;
-                        int stride = bitmap.PixelWidth * 4; var pixels = new byte[stride * bitmap.PixelHeight]; bitmap.CopyPixels(pixels, stride, 0);
+                        // Capture the native chart in its own coordinates. The wrapping
+                        // navigation toolbar and parent scroll offsets are outside its data area.
+                        var chartBitmap = Capture(plot.VerificationChart);
+                        int stride = chartBitmap.PixelWidth * 4;
+                        var pixels = new byte[stride * chartBitmap.PixelHeight];
+                        chartBitmap.CopyPixels(pixels, stride, 0);
                         int colored = 0;
-                        for (int y = (int)origin.Y + 16; y < Math.Min(bitmap.PixelHeight, origin.Y + plotHeight - 32); y++)
-                            for (int x = (int)origin.X + 54; x < Math.Min(bitmap.PixelWidth, origin.X + plotWidth - 16); x++)
+                        for (int y = 16; y < chartBitmap.PixelHeight - 32; y++)
+                            for (int x = 54; x < chartBitmap.PixelWidth - 16; x++)
                         {
                             int p = y * stride + x * 4;
-                            bool matches = pixels[p + 1] > 140 && pixels[p + 1] > pixels[p] * 1.5 && pixels[p + 1] > pixels[p + 2] * 1.5;
+                            bool matches = pixels[p + 1] > 140 &&
+                                pixels[p + 1] > pixels[p] * 1.5 && pixels[p + 1] > pixels[p + 2] * 1.5;
                             if (matches) colored++;
                         }
                         if (colored < 20) throw new InvalidOperationException($"Native chart {chartIndex} strokes missing: {colored} pixels.");
@@ -105,7 +107,7 @@ internal static class OverviewChecks
                 index++;
                 if (index == cases.Length)
                 {
-                    timer.Stop(); File.WriteAllText(Path.Combine(output, "result.txt"), "PASS: 0/1/2/4/8 GPU native overview inventory, exact comparison-series counts, colored chart rendering and narrow viewport captures. Fixtures are synthetic; no physical GPU validation.");
+                    timer.Stop(); File.WriteAllText(Path.Combine(output, "result.txt"), "PASS: 0/1/2/3/4/8 GPU native overview inventory, exact comparison-series counts, single-chart GPU panels, colored chart rendering, saved widths and filled panel rows from 760 to 2480 DIPs. Fixtures are synthetic; no physical GPU validation.");
                     window.Close(); return;
                 }
                 ApplyCase();

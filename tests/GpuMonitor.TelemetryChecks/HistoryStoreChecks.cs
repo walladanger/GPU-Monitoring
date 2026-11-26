@@ -7,7 +7,9 @@ internal static class HistoryStoreChecks
     {
         var root = Path.Combine(Path.GetTempPath(), "gpu-history-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         var file = Path.Combine(root, "samples.sqlite");
-        var now = DateTimeOffset.Parse("2026-10-24T12:00:00Z");
+        // Opening an archive prunes against the wall clock. Keep relative fixtures
+        // within retention so this restart test does not expire with the calendar.
+        var now = DateTimeOffset.UtcNow;
         var d = new DeviceIdentity("fixture", "GPU-stable", DeviceKind.Gpu, "GPU, exact", "0");
         var selection = new WorkspaceSeries("fixture", d.Id, "memory.used");
         MetricDefinition[] definitions = [new("fixture", "memory.used", "Memory", "MiB")];
