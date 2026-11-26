@@ -180,18 +180,18 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         catch (Exception error) { DevelopmentLog.Write("workspace-error", error.ToString()); if (IsLoaded) MessageBox.Show(Window.GetWindow(this), error.Message, "Workspace preset could not be saved or loaded"); }
         finally { IsEnabled = true; DevelopmentLog.Write("workspace-file", "Preset operation completed"); }
     }
-    internal IReadOnlyList<string> PresetNames() => store.ListPresets().Where(id => id != "_current").ToArray();
+    internal IReadOnlyList<string> PresetNames() => store.ListPresets();
     internal Task SavePresetAsync(string id) { DevelopmentLog.Write("workspace-save", id); return store.SaveAsync(id, Layout); }
     internal async Task LoadPresetAsync(string id) => ApplyLayout(await store.LoadAsync(id));
     internal async Task RestoreCurrentAsync()
     {
-        try { if (changes != 0 || !store.ListPresets().Contains("_current")) return; var saved = await store.LoadAsync("_current"); if (changes == 0) ApplyLayout(saved); }
+        try { if (changes != 0 || !store.HasCurrent()) return; var saved = await store.LoadCurrentAsync(); if (changes == 0) ApplyLayout(saved); }
         catch (Exception error) { DevelopmentLog.Write("workspace-restore-error", error.ToString()); MessageBox.Show(Window.GetWindow(this), error.Message, "Saved layout could not be restored"); }
     }
     private async Task SaveCurrentAfterAsync(Task prior, WorkspaceLayout layout)
     {
         await prior;
-        try { await store.SaveAsync("_current", layout); }
+        try { await store.SaveCurrentAsync(layout); }
         catch (Exception error) { DevelopmentLog.Write("workspace-autosave-error", error.ToString()); if (IsLoaded) MessageBox.Show(Window.GetWindow(this), error.Message, "Current layout could not be saved"); }
     }
     internal Task FlushAsync() => currentSave;
