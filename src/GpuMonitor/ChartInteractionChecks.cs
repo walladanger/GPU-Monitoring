@@ -100,6 +100,31 @@ internal static class ChartInteractionChecks
                 Require(traces[1].Values!.Last().Y == 15.5 && plot.ExportRows("unused").Last(r => r.Unit == "MiB").Sample.Value == 15872,
                     "MiB display conversion changed raw exported measurements.");
                 File.WriteAllText(Path.Combine(output, "charts-result.txt"), "PASS: Native mixed-unit picker, left/right inside labels, independent percent/bytes/MiB scales, exact inspection, menu zoom/pan, paused snapshot under incoming telemetry, reset to live, series visibility, raw-unit CSV and PNG capture. Synthetic fixtures only; no physical pointer, target-DPI or hardware signoff.");
+                // Exercise the production synchronization boundary with distinct
+                // data, including a gap, rather than just calling both cursors.
+                var follower = new TelemetryPlot("%", 100) { Height = 240 };
+                follower.SetSeries([("Other device", "#33DF32")]);
+                var otherSamples = usage.Select((s, i) => new TelemetrySample(s.Device with { Id = "other" }, s.MetricKey, s.Time, i == 30 ? null : 70)).ToArray();
+                follower.Update([otherSamples], now, 5); root.Children.Add(follower);
+                var linked = new ChartSynchronization(); linked.Add(plot); linked.Add(follower); linked.Add(plot);
+                Require(linked.Count == 2, "Synchronization registered a chart twice.");
+                plot.InspectAt(plot.VerificationSamplePosition(0, usage[^1]));
+                Require(follower.IsInspecting && follower.InspectionText.Contains("N/A"), "Synchronized inspection fabricated a value over a missing measurement.");
+                plot.InspectAt(new Point(-1, -1));
+                Require(!follower.IsInspecting, "Leaving the originating plot retained a remote cursor.");
+                plot.Zoom(.5);
+                Require(follower.ViewRange == plot.ViewRange && follower.IsViewPaused, "Zoom did not synchronize exact time limits.");
+                plot.Pan(-.25);
+                Require(follower.ViewRange == plot.ViewRange, "Pan timelines drifted.");
+                follower.Update([otherSamples.Concat([new(otherSamples[0].Device, "usage", later, 99)]).ToArray()], later, 5);
+                Require(follower.VisibleSamples.All(s => s.Value != 99), "Incoming measurements changed a linked frozen view.");
+                plot.ResetView();
+                Require(!follower.IsViewPaused && follower.VisibleSamples.Any(s => s.Value == 99), "Linked reset did not resume the follower's own telemetry.");
+                linked.Enabled = false; plot.PauseView();
+                Require(!follower.IsViewPaused, "Disabled synchronization still propagated a pause.");
+                linked.Remove(plot); linked.Remove(follower);
+                Require(linked.Count == 0, "Unloaded charts retained synchronization subscriptions.");
+                File.AppendAllText(Path.Combine(output, "charts-result.txt"), "\nPASS: Cross-chart exact cursors, missing-value inspection, zoom/pan/pause/reset, frozen independent samples, opt-out and subscription cleanup.");
                 window.Close(); app.Shutdown();
             }
             catch (Exception error) { Fail(error); }
