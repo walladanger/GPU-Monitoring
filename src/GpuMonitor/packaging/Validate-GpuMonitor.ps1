@@ -106,7 +106,14 @@ try {
             $text = Get-Content -LiteralPath $path -Raw
             if (-not $text.StartsWith('PASS:')) { throw $text }
             Add-Result $gate.Flag 'PASS' $text
-        } catch { Add-Result $gate.Flag 'FAIL' $_.Exception.Message }
+        } catch {
+            $detail = $_.Exception.Message
+            if (Test-Path -LiteralPath $path) {
+                $resultText = Get-Content -LiteralPath $path -Raw
+                if ($resultText) { $detail += ": " + $resultText.Trim() }
+            }
+            Add-Result $gate.Flag 'FAIL' $detail
+        }
     }
     $fixtures = Join-Path $appDirectory 'overview-verification'
     if (Test-Path -LiteralPath $fixtures) { Copy-Item -LiteralPath $fixtures -Destination (Join-Path $run 'synthetic-fixture-results') -Recurse }
