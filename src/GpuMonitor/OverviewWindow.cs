@@ -32,6 +32,7 @@ public sealed partial class OverviewWindow : Window
     private readonly TelemetryPlot comparison = new("%", 100) { Height = 148 };
     private readonly HardwareOverviewCard cpuCard = new(true), diskCard = new(false);
     private readonly WrapPanel hardwareRow = new();
+    private readonly EventTimelinePanel activityTimeline = new();
     private readonly ScrollViewer scroll;
     private readonly DispatcherTimer timer = new();
     private readonly Settings settings;
@@ -83,6 +84,10 @@ public sealed partial class OverviewWindow : Window
         comparisonContent.Children.Add(comparisonPanel); comparisonContent.Children.Add(legend);
         var compareCard = OverviewTheme.Card(comparisonContent); compareCard.Margin = new(0, 0, 14, 14); body.Children.Add(Surface("GPU comparison", compareCard));
         OverviewTheme.PlotMenu(comparison, "%", "gpu-comparison");
+        ChartSynchronization.CursorChanged += activityTimeline.SetCursor;
+        ChartSynchronization.RangeChanged += activityTimeline.SetRange;
+        activityTimeline.CursorMoved += ChartSynchronization.Inspect;
+        body.Children.Add(activityTimeline);
         var footer = OverviewTheme.Text(!usesFixtureData ? "Read-only monitoring · Right-click any graph to inspect or export its source data" : "Synthetic fixture data · actual Windows app render · not live hardware readings", 11, OverviewTheme.Muted);
         footer.TextWrapping = TextWrapping.Wrap; body.Children.Add(footer);
         gpuGrid.SizeChanged += (_, _) => Reflow(); hardwareRow.SizeChanged += (_, _) => Reflow();
@@ -152,6 +157,7 @@ public sealed partial class OverviewWindow : Window
         Add("\uE7F4", "GPU Details", () => { details = true; BuildNavigation(); Render(viewTime); }, details);
         Add("\uE71D", "Processes", () => customWorkspace.OpenPicker("Process"), false);
         Add("\uE9D9", "System", () => hardwareRow.BringIntoView(), false);
+        Add("\uE9D5", "Activity", () => activityTimeline.BringIntoView(), false);
         Add("\uE713", "Settings", OpenSettings, false);
         void Add(string glyph, string label, Action action, bool selected)
         {
@@ -279,6 +285,7 @@ public sealed partial class OverviewWindow : Window
         cpuCard.Update(snapshots, now, settings.WindowMinutes); diskCard.Update(snapshots, now, settings.WindowMinutes);
         customWorkspace.Visibility = customWorkspace.PanelCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         customWorkspace.Refresh(snapshots, now, settings.WindowMinutes);
+        activityTimeline.Update(snapshots, now, settings.WindowMinutes);
         Reflow();
     }
     private PanelSurface Surface(string title, FrameworkElement view, string? identity = null, IReadOnlyList<WorkspaceSeries>? defaults = null) {

@@ -228,6 +228,7 @@ internal static class OverviewTheme
         menu.Items.Add(MenuCommand("Export chart as PNG…", () => Export("png")));
         menu.Items.Add(MenuCommand("Export visible data as CSV…", () => Export("csv")));
         menu.Items.Add(MenuCommand("Export visible data as JSON…", () => Export("json")));
+        menu.Items.Add(MenuCommand("Export visible data as text…", () => Export("txt")));
         plot.ContextMenu = menu;
         void Export(string extension)
         {
@@ -236,10 +237,11 @@ internal static class OverviewTheme
             try
             {
                 if (extension == "png") plot.SavePng(dialog.FileName);
-                else if (extension == "csv")
+                else if (extension is "csv" or "txt")
                 {
                     using var writer = new StreamWriter(dialog.FileName);
-                    PlotData.WriteCsv(writer, plot.ExportRows(rawUnit));
+                    if (extension == "csv") PlotData.WriteCsv(writer, plot.ExportRows(rawUnit));
+                    else PlotData.WriteText(writer, plot.ExportRows(rawUnit));
                 }
                 else File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(plot.ExportRows(rawUnit).Select(row => new
                 { timestamp_utc = row.Sample.Time, source = row.Sample.Device.Source, device_id = row.Sample.Device.Id, device_name = row.Sample.Device.Name,
