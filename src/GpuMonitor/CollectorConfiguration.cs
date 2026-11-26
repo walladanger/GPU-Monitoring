@@ -13,6 +13,7 @@ public sealed class CollectorConfiguration
     public List<MetadataFeedConfiguration> Feeds { get; set; } = [];
     public static CollectorConfiguration Load(string path)
     {
+        if (!File.Exists(path)) throw new FileNotFoundException($"Collector configuration '{System.IO.Path.GetFileName(path)}' was not found.");
         if (new FileInfo(path).Length > 65536) throw new IOException("Collector configuration exceeds 64 KiB.");
         var result = JsonSerializer.Deserialize<CollectorConfiguration>(File.ReadAllText(path),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, MaxDepth = 16 })
