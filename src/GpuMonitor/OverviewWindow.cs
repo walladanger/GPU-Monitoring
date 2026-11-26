@@ -406,7 +406,7 @@ public sealed partial class OverviewWindow : Window
         card.SelectRequested += () => customWorkspace.OpenPicker(gpuId);
         var window = new Window
         {
-            Title = "GPU Monitor · GPU details",
+            Owner = this, Title = "GPU Monitor · GPU details",
             Width = 800, Height = 730, MinWidth = 390, MinHeight = 330,
             Background = OverviewTheme.Canvas, Foreground = Brushes.White,
             FontFamily = new FontFamily("Segoe UI"), ResizeMode = ResizeMode.CanResize,
