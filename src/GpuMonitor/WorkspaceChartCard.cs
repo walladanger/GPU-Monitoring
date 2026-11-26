@@ -65,7 +65,7 @@ internal sealed class WorkspaceChartCard : Border
         ResizeGrip.Width = ResizeGrip.Height = 14; ResizeGrip.HorizontalAlignment = HorizontalAlignment.Right; ResizeGrip.VerticalAlignment = VerticalAlignment.Bottom; ResizeGrip.Margin = new(-1);
         ResizeGrip.ToolTip = "Drag to resize; dimensions snap to slots and rows. Escape cancels.";
         System.Windows.Automation.AutomationProperties.SetName(ResizeGrip, "Resize " + panel.Title); surface.Children.Add(ResizeGrip);
-        ResizeGrip.DragDelta += (_, e) => { if (Window.GetWindow(this) == detachedWindow) return; if (Parent is ScrollViewer && plot != null) plot.Height = Math.Clamp(plot.Height + e.VerticalChange, 160, 800); };
+        ResizeGrip.DragDelta += (_, e) => { if (Window.GetWindow(this) == detachedWindow) return; if (Parent is ScrollViewer && plot != null) plot.Height = Math.Clamp(plot.Height + e.VerticalChange, MinimumPlotHeight(), 800); };
     }
 
     public void Refresh(IReadOnlyList<ProviderSnapshot> sources, DateTimeOffset now, int minutes)
@@ -87,7 +87,7 @@ internal sealed class WorkspaceChartCard : Border
         {
             if (plot != null) content.Children.Remove(plot);
             axisKey = nextAxisKey;
-            plot = new(data.Axes[0].DisplayUnit, data.Axes[0].Maximum) { Height = Math.Max(Specification.Chart == "lanes" ? Specification.Series.Count * 90 : 160, (previewSize?.HeightRows ?? Specification.HeightRows) * 100) };
+            plot = new(data.Axes[0].DisplayUnit, data.Axes[0].Maximum) { Height = Math.Max(MinimumPlotHeight(), (previewSize?.HeightRows ?? Specification.HeightRows) * 100) };
             plot.SetSeries(data.Series.Select((s, i) => (s.Name, Colors[i % Colors.Length])).ToArray(), Specification.Chart == "area");
             plot.ConfigureAxes(data.Axes, data.Series.Select(s => s.Selection.Axis).ToArray()); plot.SetLaneMode(Specification.Chart == "lanes");
             OverviewTheme.PlotMenu(plot, data.Unit, Specification.Id); content.Children.Insert(2, plot);
@@ -110,9 +110,14 @@ internal sealed class WorkspaceChartCard : Border
     internal void PreviewSize(WorkspacePanel? dimensions)
     {
         previewSize = dimensions;
-        if (plot != null) plot.Height = Math.Max(160, (dimensions?.HeightRows ?? Specification.HeightRows) * 100);
+        if (plot != null) plot.Height = Math.Max(MinimumPlotHeight(dimensions), (dimensions?.HeightRows ?? Specification.HeightRows) * 100);
         ResizeGrip.ToolTip = dimensions == null ? "Drag to resize; dimensions snap to slots and rows. Escape cancels." :
             $"{dimensions.WidthSlots} slot(s) × {dimensions.HeightRows} row(s). Escape cancels.";
+    }
+    private double MinimumPlotHeight(WorkspacePanel? panel = null)
+    {
+        var specification = panel ?? Specification;
+        return specification.Chart == "lanes" ? Math.Max(160, specification.Series.Count * 90) : 160;
     }
     private static Thumb Handle(string text, double fontSize, Brush foreground, Cursor cursor)
     {
