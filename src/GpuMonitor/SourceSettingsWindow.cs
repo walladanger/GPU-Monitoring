@@ -53,7 +53,7 @@ internal sealed class SourceSettingsWindow : Window
         cores.IsChecked = configuration.CollectCpuCores; processes.IsChecked = configuration.CollectProcesses; rows.Children.Add(cores); rows.Children.Add(processes);
         var runtimeList = configuration.Runtimes.ToList();
         foreach (var (kind, endpoint) in new[] { ("sglang", RuntimeMetricsCollector.DefaultSglangEndpoint), ("vllm", RuntimeMetricsCollector.DefaultVllmEndpoint), ("llamacpp", RuntimeMetricsCollector.DefaultLlamaCppEndpoint) })
-            if (!runtimeList.Any(r => r.Kind == kind)) runtimeList.Add(new() { Id = kind + "-local", Kind = kind, Endpoint = endpoint.AbsoluteUri });
+            if (!runtimeList.Any(r => r.Kind == kind) && runtimeList.Count + configuration.Feeds.Count < 16) runtimeList.Add(new() { Id = kind + "-local", Kind = kind, Endpoint = endpoint.AbsoluteUri });
         rows.Children.Add(OverviewTheme.Text("Inference runtimes", 16));
         foreach (var item in runtimeList)
         {
@@ -61,10 +61,10 @@ internal sealed class SourceSettingsWindow : Window
             rows.Children.Add(enabled); rows.Children.Add(endpoint); runtimes.Add((item, enabled, endpoint));
         }
         var feedList = configuration.Feeds.ToList();
-        foreach (string kind in new[] { "agui", "usage", "otlp" })
-            if (!feedList.Any(f => f.Kind == kind)) feedList.Add(new() { Id = kind + "-local", Kind = kind });
+        foreach (string kind in new[] { "agui", "usage", "otlp", "tokenmonitor" })
+            if (!feedList.Any(f => f.Kind == kind) && runtimeList.Count + feedList.Count < 16) feedList.Add(new() { Id = kind + "-local", Kind = kind });
         rows.Children.Add(OverviewTheme.Text("Local metadata feeds", 16));
-        rows.Children.Add(OverviewTheme.Text("AG-UI lifecycle · token usage JSONL · OTLP JSONL from an instrumented collector", 12, OverviewTheme.Muted));
+        rows.Children.Add(OverviewTheme.Text("AG-UI / usage / OTLP JSONL · Token Monitor auto-export JSON", 12, OverviewTheme.Muted));
         foreach (var item in feedList)
         {
             var enabled = Toggle(item.Kind + " · " + item.Id, item.Enabled); var path = Input(item.Path, item.Kind + " feed path");
