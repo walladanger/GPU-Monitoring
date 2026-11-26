@@ -31,7 +31,6 @@ public static class EventTimeline
                 int row = rowEnds.FindIndex(end => end < Start(e));
                 if (row < 0)
                 {
-                    if (lanes.Count >= 24) continue;
                     row = rowEnds.Count;
                     rowEnds.Add(DateTimeOffset.MinValue);
                     lanes.Add(row == 0 ? group.Key : group.Key + " · " + (row + 1));
@@ -40,7 +39,7 @@ public static class EventTimeline
                 entries.Add(new(e, Start(e), e.Time, firstRow + row));
                 if (entries.Count == 512) break;
             }
-            if (entries.Count == 512 || lanes.Count == 24) break;
+            if (entries.Count == 512) break;
         }
         var ordered = entries.OrderBy(e => e.End).ThenBy(e => e.Event.Source, StringComparer.Ordinal)
             .ThenBy(e => e.Event.Id, StringComparer.Ordinal).ToArray();
