@@ -139,5 +139,9 @@ finally {
     $lines | Set-Content -LiteralPath $reportPath -Encoding UTF8
     if ($OpenReport) { Start-Process -FilePath notepad.exe -ArgumentList ('"' + $reportPath + '"') }
 }
-if (@($results | Where-Object Status -eq 'FAIL').Count -gt 0) { exit 1 }
+if (@($results | Where-Object Status -eq 'FAIL').Count -gt 0) {
+    Write-Output "Acceptance failures. Full report: $reportPath"
+    Get-Content -LiteralPath $reportPath
+    exit 1
+}
 exit 0
