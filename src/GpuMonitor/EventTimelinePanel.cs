@@ -12,6 +12,7 @@ internal sealed class EventTimelinePanel : Border
     private readonly Canvas canvas = new() { Background = OverviewTheme.Canvas, MinHeight = 140, ClipToBounds = true };
     private readonly TextBlock status = OverviewTheme.Text("No recorded activity in this time window.", 12, OverviewTheme.Muted);
     private readonly TextBlock inspection = OverviewTheme.Text("", 11, OverviewTheme.Muted);
+    private Line? cursorLine;
     private readonly ComboBox source = new() { MinWidth = 130, MaxWidth = 240 };
     private IReadOnlyList<TelemetryEvent> events = [];
     private IReadOnlyList<TelemetryEvent>? frozen;
@@ -56,7 +57,7 @@ internal sealed class EventTimelinePanel : Border
         if (value == null) frozen = null; else frozen ??= events.ToArray();
         range = value; Render();
     }
-    public void SetCursor(DateTimeOffset? value) { cursor = value; Draw(); }
+    public void SetCursor(DateTimeOffset? value) { cursor = value; UpdateCursorOverlay(); }
     private void Render()
     {
         if (now == default) return;
@@ -67,7 +68,7 @@ internal sealed class EventTimelinePanel : Border
     }
     private void Draw()
     {
-        canvas.Children.Clear(); double width = canvas.ActualWidth; if (width < 20) return;
+        canvas.Children.Clear(); cursorLine = null; double width = canvas.ActualWidth; if (width < 20) return;
         canvas.Height = Math.Max(140, View.Lanes.Count * 40 + 30);
         double X(DateTimeOffset time) => 4 + Math.Clamp((time - View.Range.Start).TotalMilliseconds / View.Range.Duration.TotalMilliseconds, 0, 1) * (width - 8);
         for (int i = 0; i <= 4; i++)
@@ -90,9 +91,19 @@ internal sealed class EventTimelinePanel : Border
                 ToolTip = $"{item.Event.Kind} · {item.Event.Name}\n{item.Start:O} – {item.End:O}\n{item.Event.Source} · {item.Event.DeviceId}\nCorrelation: {item.Event.CorrelationId ?? "none"}\nDuration: {item.Event.Duration?.TotalMilliseconds.ToString("0.###") ?? "unknown"} ms\nTimestamp estimated: {item.Event.TimestampEstimated}" };
             Canvas.SetLeft(bar, X(item.Start)); Canvas.SetTop(bar, item.Lane * 40 + 17); canvas.Children.Add(bar);
         }
+        cursorLine = new Line { Y1 = 0, Y2 = canvas.Height - 20, Stroke = Brushes.LightGray, StrokeThickness = 1, IsHitTestVisible = false };
+        canvas.Children.Add(cursorLine);
+        UpdateCursorOverlay();
+    }
+    private void UpdateCursorOverlay()
+    {
         inspection.Text = cursor == null ? "" : $"Shared cursor · {cursor.Value.ToLocalTime():yyyy-MM-dd HH:mm:ss.fff}";
-        if (cursor is { } time && time >= View.Range.Start && time <= View.Range.End)
-            canvas.Children.Add(new Line { X1 = X(time), X2 = X(time), Y1 = 0, Y2 = canvas.Height - 20, Stroke = Brushes.LightGray, StrokeThickness = 1, IsHitTestVisible = false });
+        if (cursorLine == null) return;
+        bool visible = cursor is { } time && time >= View.Range.Start && time <= View.Range.End && canvas.ActualWidth >= 20;
+        cursorLine.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible) return;
+        double x = 4 + Math.Clamp((cursor!.Value - View.Range.Start).TotalMilliseconds / View.Range.Duration.TotalMilliseconds, 0, 1) * (canvas.ActualWidth - 8);
+        cursorLine.X1 = x; cursorLine.X2 = x; cursorLine.Y2 = canvas.Height - 20;
     }
     private void Export(string format)
     {
