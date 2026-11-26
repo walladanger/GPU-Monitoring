@@ -46,7 +46,7 @@ public sealed class TokenMonitorExportCollector(string sourceId, string path) : 
         bool offset = generated != null && (generated.EndsWith('Z') || generated.Length >= 6 && generated[^3] == ':' && generated[^6] is '+' or '-');
         if (!offset || !DateTimeOffset.TryParse(generated, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var time))
             throw new FormatException("Token Monitor export needs a generatedAt timestamp with offset.");
-        if (latestAcceptedSnapshot is { } latest && time < latest) throw new StaleExportException("Ignoring an older Token Monitor export snapshot.");
+        if (latestAcceptedSnapshot is { } latestSnapshot && time < latestSnapshot) throw new StaleExportException("Ignoring an older Token Monitor export snapshot.");
         var snapshot = root.GetProperty("snapshot");
         var devices = new List<DeviceIdentity>(); var samples = new List<TelemetrySample>();
         var next = new Dictionary<string, (DateTimeOffset Time, double Total)>();
