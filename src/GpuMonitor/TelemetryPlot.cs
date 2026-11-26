@@ -95,6 +95,7 @@ public sealed partial class TelemetryPlot : Grid
     public void SetSeries(IReadOnlyList<(string Name, string Color)> definitions, bool? filled = null)
     {
         ClearSelection(); series.Clear(); viewRange = null; frozenHistories = null; latestHistories = [];
+        visible = []; laneMaxima = [];
         foreach (var definition in definitions)
         {
             var color = SKColor.Parse(definition.Color);
@@ -167,11 +168,11 @@ public sealed partial class TelemetryPlot : Grid
     public void SetCursor(DateTimeOffset? time)
     {
         if (selectedPoint != null) { RefreshSelectedPoint(); return; }
-        inspection.Text = ""; detailPanel.Visibility = Visibility.Collapsed; cursor.Visibility = Visibility.Collapsed;
-        if (time == null || timeAxis.MinLimit == null || timeAxis.MaxLimit == null) return;
+        inspection.Text = ""; cursor.Visibility = Visibility.Collapsed;
+        if (time == null || timeAxis.MinLimit == null || timeAxis.MaxLimit == null) { detailPanel.Visibility = Visibility.Collapsed; return; }
         double fraction = (time.Value.ToUnixTimeMilliseconds() - timeAxis.MinLimit.Value) /
             (timeAxis.MaxLimit.Value - timeAxis.MinLimit.Value);
-        if (fraction < 0 || fraction > 1) return;
+        if (fraction < 0 || fraction > 1) { detailPanel.Visibility = Visibility.Collapsed; return;
         cursor.X1 = cursor.X2 = 4 + fraction * Math.Max(0, chart.ActualWidth - 8);
         cursor.Y1 = 8; cursor.Y2 = Math.Max(8, chart.ActualHeight - 24); cursor.Visibility = Visibility.Visible;
         inspection.Text = string.Join("\n", visible.Select((samples, i) =>
