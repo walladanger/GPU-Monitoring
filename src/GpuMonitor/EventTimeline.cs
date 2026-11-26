@@ -17,14 +17,34 @@ public static class EventTimeline
             ? e.Time - duration : e.Time;
         var matching = events.Where(e => (source == null || e.Source == source) && e.Time >= range.Start && Start(e) <= range.End)
             .DistinctBy(e => (e.Source, e.Id, e.Kind)).OrderByDescending(e => e.Time).ToArray();
-        // Group trace spans by correlation and uncorrelated processes by stable
-        // identity. Never merge equal PIDs from unrelated provider lifetimes.
+        // Trace spans share a primary correlation lane, while NVIDIA process observations use
+        // stable process identity. Overlapping intervals get subrows so every marker remains inspectable.
         string Lane(TelemetryEvent e) => e.Source + " · " + (e.Source == "nvidia-processes" ? e.DeviceId ?? e.Id : e.CorrelationId ?? e.DeviceId ?? "Events");
-        var lanes = matching.Select(Lane).Distinct().Take(24).ToArray();
-        var indices = lanes.Select((name, index) => (name, index)).ToDictionary(p => p.name, p => p.index);
-        var entries = matching.Where(e => indices.ContainsKey(Lane(e))).Take(512)
-            .OrderBy(e => e.Time).Select(e => new TimelineEntry(e, Start(e), e.Time, indices[Lane(e)])).ToArray();
-        return new(range, lanes, entries, matching.Length - entries.Length);
+        var lanes = new List<string>();
+        var entries = new List<TimelineEntry>();
+        foreach (var group in matching.GroupBy(Lane))
+        {
+            int firstRow = lanes.Count;
+            var rowEnds = new List<DateTimeOffset>();
+            foreach (var e in group.OrderBy(Start).ThenByDescending(e => e.Time).ThenBy(e => e.Id, StringComparer.Ordinal))
+            {
+                int row = rowEnds.FindIndex(end => end < Start(e));
+                if (row < 0)
+                {
+                    if (lanes.Count >= 24) continue;
+                    row = rowEnds.Count;
+                    rowEnds.Add(DateTimeOffset.MinValue);
+                    lanes.Add(row == 0 ? group.Key : group.Key + " · " + (row + 1));
+                }
+                rowEnds[row] = e.Time;
+                entries.Add(new(e, Start(e), e.Time, firstRow + row));
+                if (entries.Count == 512) break;
+            }
+            if (entries.Count == 512 || lanes.Count == 24) break;
+        }
+        var ordered = entries.OrderBy(e => e.End).ThenBy(e => e.Event.Source, StringComparer.Ordinal)
+            .ThenBy(e => e.Event.Id, StringComparer.Ordinal).ToArray();
+        return new(range, lanes.AsReadOnly(), ordered, matching.Length - ordered.Length);
     }
 
     public static void Export(TextWriter writer, TimelineView view, string format)
