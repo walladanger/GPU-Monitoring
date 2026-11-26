@@ -24,6 +24,8 @@ public sealed partial class TelemetryPlot : Grid
     private readonly Axis valueAxis;
     private readonly List<LineSeries<ObservablePoint>> series = [];
     private readonly Line cursor = new() { Stroke = Brushes.LightGray, StrokeThickness = 1, IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+    private readonly Line valueCursor = new() { Stroke = Brushes.LightGray, StrokeThickness = .7, StrokeDashArray = new DoubleCollection([3, 3]), IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+    internal bool HasValueCrosshair => valueCursor.Visibility == Visibility.Visible;
     private readonly Canvas scales = new() { IsHitTestVisible = false };
     private readonly TextBlock inspection = new() { Foreground = Brushes.White, FontSize = 11, Margin = new(35, 4, 8, 0), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false };
     private IReadOnlyList<IReadOnlyList<TelemetrySample>> visible = Array.Empty<IReadOnlyList<TelemetrySample>>();
@@ -75,7 +77,7 @@ public sealed partial class TelemetryPlot : Grid
             DrawMargin = new Margin(4, 8, 4, 24)
         };
         Children.Add(chart); Children.Add(scales); SizeChanged += (_, _) => RefreshScales();
-        var overlay = new Canvas { IsHitTestVisible = false }; overlay.Children.Add(cursor); Children.Add(overlay);
+        var overlay = new Canvas { IsHitTestVisible = false }; overlay.Children.Add(cursor); overlay.Children.Add(valueCursor); Children.Add(overlay);
         Children.Add(currentReadings); WireSelection();
         foreach (UIElement child in Children) Grid.SetRow(child, 1);
         chart.SizeChanged += (_, _) => { RefreshScales(); RefreshSelectedPoint(); };
@@ -92,9 +94,13 @@ public sealed partial class TelemetryPlot : Grid
                 timeAxis.MinLimit == null || timeAxis.MaxLimit == null) { MoveCursor(null); return; }
             // The draw margin and explicit limits are already known before LiveCharts
             // initializes its internal scaler (mouse input can arrive during first render).
-            MoveCursor(PlotData.CursorTime((p.X - 4) / (chart.ActualWidth - 8),
+            var pointerTime = PlotData.CursorTime((p.X - 4) / (chart.ActualWidth - 8),
                 DateTimeOffset.FromUnixTimeMilliseconds((long)timeAxis.MinLimit.Value),
-                DateTimeOffset.FromUnixTimeMilliseconds((long)timeAxis.MaxLimit.Value)));
+                DateTimeOffset.FromUnixTimeMilliseconds((long)timeAxis.MaxLimit.Value));
+            var nearest = pointerTime == null ? null : visible.Where((_, i) => series[i].IsVisible)
+                .Select(samples => PlotData.Nearest(samples, pointerTime.Value)).OfType<TelemetrySample>()
+                .MinBy(sample => Math.Abs((sample.Time - pointerTime.Value).Ticks));
+            MoveCursor(nearest?.Time);
     }
 
     public void SetSeries(IReadOnlyList<(string Name, string Color)> definitions, bool? filled = null)
@@ -179,18 +185,31 @@ public sealed partial class TelemetryPlot : Grid
     {
         inspectionTime = time;
         if (selectedPoint != null) { RefreshSelectedPoint(); return; }
-        inspection.Text = ""; detailPanel.Visibility = Visibility.Collapsed; cursor.Visibility = Visibility.Collapsed;
+        inspection.Text = ""; detailPanel.Visibility = Visibility.Collapsed; cursor.Visibility = valueCursor.Visibility = Visibility.Collapsed;
         if (time == null || timeAxis.MinLimit == null || timeAxis.MaxLimit == null) return;
         double fraction = (time.Value.ToUnixTimeMilliseconds() - timeAxis.MinLimit.Value) /
             (timeAxis.MaxLimit.Value - timeAxis.MinLimit.Value);
         if (fraction < 0 || fraction > 1) return;
         cursor.X1 = cursor.X2 = 4 + fraction * Math.Max(0, chart.ActualWidth - 8);
         cursor.Y1 = 8; cursor.Y2 = Math.Max(8, chart.ActualHeight - 24); cursor.Visibility = Visibility.Visible;
+        for (int i = 0; i < visible.Count; i++)
+        {
+            if (!series[i].IsVisible) continue;
+            var selected = PlotData.Nearest(visible[i], time.Value);
+            if (selected?.Value != null)
+            {
+                var point = SamplePosition(i, selected);
+                valueCursor.X1 = 4; valueCursor.X2 = Math.Max(4, chart.ActualWidth - 4);
+                valueCursor.Y1 = valueCursor.Y2 = point.Y;
+                valueCursor.Visibility = Visibility.Visible;
+            }
+            break;
+        }
         inspection.Text = string.Join("\n", visible.Select((samples, i) =>
         {
             var sample = series[i].IsVisible ? PlotData.Nearest(samples, time.Value) : null;
             return sample == null ? "" : $"{series[i].Name} · {sample.Time.ToLocalTime():HH:mm:ss.fff} · " +
-                (sample.Value is double value ? $"{value / SeriesDivisor(i):0.###}{SeriesUnit(i)}" : "N/A");
+                (sample.Value is double value ? $"{value / SeriesDivisor(i):R}{SeriesUnit(i)}" : "N/A");
         }));
         detailPanel.Visibility = string.IsNullOrWhiteSpace(inspection.Text) ? Visibility.Collapsed : Visibility.Visible; detailPanel.RefreshBackdrop();
     }
