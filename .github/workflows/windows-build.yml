@@ -105,9 +105,7 @@ jobs:
         run: |
           $exe = Resolve-Path src/GpuMonitor/publish/GpuMonitor.exe
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./src/GpuMonitor/publish/Validate-GpuMonitor.ps1 -Executable $exe -ExpectedGpuCount 0 -DurationSeconds 6 -OutputRoot (Join-Path $env:RUNNER_TEMP 'GPU validation with spaces')
-          $acceptanceExit = $LASTEXITCODE
-          Get-ChildItem -LiteralPath (Join-Path $env:RUNNER_TEMP 'GPU validation with spaces') -Filter acceptance.txt -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 | ForEach-Object { Get-Content -LiteralPath $_.FullName }
-          if ($acceptanceExit -ne 0) { throw 'Packaged acceptance runner failed' }
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged acceptance runner failed' }
       - name: Verify installer install upgrade shortcuts and uninstall
         shell: pwsh
         run: ./tests/acceptance/InstallerLifecycleChecks.ps1 -Installer ./src/GpuMonitor/artifacts/GPU-Monitor-Setup.exe
