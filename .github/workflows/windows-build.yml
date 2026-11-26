@@ -108,6 +108,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Packaged acceptance runner failed' }
       - name: Verify installer install upgrade shortcuts and uninstall
         shell: pwsh
+        timeout-minutes: 8
         run: ./tests/acceptance/InstallerLifecycleChecks.ps1 -Installer ./src/GpuMonitor/artifacts/GPU-Monitor-Setup.exe
       - name: Verify actual dashboard engine lifecycle
         shell: pwsh
