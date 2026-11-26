@@ -16,17 +16,26 @@ try {
     $sentinel = '{"RefreshSeconds":5,"WindowMinutes":15,"MinimizeToTray":false,"HistoryEnabled":false}'
     [IO.File]::WriteAllText($settingsPath, $sentinel)
     $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=`"$installRoot`"", '/TASKS=desktopicon')
+    Write-Output 'Lifecycle: starting silent install'
+    Write-Output 'Lifecycle: starting reinstall/upgrade'
     Run-Bounded (Resolve-Path $Installer) $arguments
+    Write-Output 'Lifecycle: reinstall/upgrade completed'
+    Write-Output 'Lifecycle: first install completed'
     $exe = Join-Path $installRoot 'GpuMonitor.exe'
     if (-not (Test-Path -LiteralPath $exe) -or -not (Test-Path -LiteralPath $desktopLink) -or -not (Test-Path -LiteralPath $startLink)) { throw 'Installer executable or requested shortcuts are missing.' }
+    Write-Output 'Lifecycle: checking shortcut targets'
     $shell = New-Object -ComObject WScript.Shell
     foreach ($link in @($desktopLink, $startLink)) {
         if ($shell.CreateShortcut($link).TargetPath -ne $exe) { throw "Shortcut targets the wrong executable: $link" }
     }
+    Write-Output 'Lifecycle: starting installed self-test'
     Run-Bounded $exe @('--self-test')
+    Write-Output 'Lifecycle: installed self-test completed'
     Run-Bounded (Resolve-Path $Installer) $arguments
     if ([IO.File]::ReadAllText($settingsPath) -ne $sentinel) { throw 'Reinstall/upgrade modified existing preferences.' }
+    Write-Output 'Lifecycle: starting uninstall'
     Run-Bounded (Join-Path $installRoot 'unins000.exe') @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART')
+    Write-Output 'Lifecycle: uninstall completed'
     if ((Test-Path -LiteralPath $exe) -or (Test-Path -LiteralPath $desktopLink) -or (Test-Path -LiteralPath $startLink)) { throw 'Uninstall left an executable or shortcut registered.' }
     if ([IO.File]::ReadAllText($settingsPath) -ne $sentinel) { throw 'Uninstall removed or changed saved preferences.' }
     Write-Output 'PASS: Silent per-user install, installed native self-test, desktop/Start menu targets, reinstall/upgrade and uninstall preserving preferences. Ephemeral Windows CI only; target-machine lifecycle and human signoff remain pending.'
