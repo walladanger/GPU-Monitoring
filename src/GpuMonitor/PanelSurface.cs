@@ -115,6 +115,7 @@ internal sealed class PanelSurface : Border
         if (window != null) { window.Activate(); return; }
         DevelopmentLog.Write("panel-detach", title);
         var owner = Window.GetWindow(this);
+        double inlineWidth = settings.SurfaceWidth, inlineHeight = settings.SurfaceHeight;
         Child = OverviewTheme.Command("Show detached " + title, () => window?.Activate());
         window = new Window { Title = title, Width = Math.Max(480, ActualWidth), Height = Math.Clamp(ActualHeight + 40, 320, 1000),
             MinWidth = 360, MinHeight = 280, Owner = owner, Background = OverviewTheme.Canvas,
@@ -127,7 +128,8 @@ internal sealed class PanelSurface : Border
             ApplySize();
         };
         window.Closed += (_, _) => {
-            DevelopmentLog.Write("panel-restore", title); selected?.CloseDetached(); ((ScrollViewer)window!.Content).Content = null; window.Content = null; window = null; surfaceRoot.Width = double.NaN; Child = surfaceRoot; ApplySize(); Resized?.Invoke(); save();
+            DevelopmentLog.Write("panel-restore", title); selected?.CloseDetached(); ((ScrollViewer)window!.Content).Content = null; window.Content = null; window = null; surfaceRoot.Width = double.NaN;
+            settings.SurfaceWidth = inlineWidth; settings.SurfaceHeight = inlineHeight; Child = surfaceRoot; ApplySize(); Resized?.Invoke(); save();
         };
         window.Show();
     }
