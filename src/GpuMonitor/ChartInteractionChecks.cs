@@ -77,6 +77,12 @@ internal static class ChartInteractionChecks
                 var bitmap = new BitmapImage(new Uri(Path.Combine(output, "chart-dual-axis.png")));
                 Require(bitmap.PixelWidth >= 1100 && bitmap.PixelHeight == 400, "PNG export did not capture the rendered chart bounds.");
                 // Freeze, accept later telemetry, and verify view data remains unchanged until reset.
+                plot.SetStepped(true); plot.Update([usage, memory], now, 5);
+                Require(traces[0].Values!.Count() == usage.Length * 2 - 1 && plot.ExportRows("unused").Count == usage.Length + memory.Length,
+                    "Stepped display vertices leaked into raw exported measurements.");
+                Require(traces[0].Values!.ElementAt(1).X == usage[1].Time.ToUnixTimeMilliseconds() && traces[0].Values!.ElementAt(1).Y == usage[0].Value,
+                    "Native stepped geometry did not retain the source value up to the next sample.");
+                plot.SetStepped(false); plot.Update([usage, memory], now, 5);
                 var menu = plot.ContextMenu!;
                 void Command(string prefix) => menu.Items.OfType<MenuItem>().Single(i => ((string)i.Header).StartsWith(prefix, StringComparison.Ordinal))
                     .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));

@@ -90,6 +90,7 @@ internal sealed class WorkspaceChartCard : Border
             plot = new(data.Axes[0].DisplayUnit, data.Axes[0].Maximum) { Height = Math.Max(Specification.Chart == "lanes" ? Specification.Series.Count * 90 : 160, (previewSize?.HeightRows ?? Specification.HeightRows) * 100) };
             plot.SetSeries(data.Series.Select((s, i) => (s.Name, Colors[i % Colors.Length])).ToArray(), Specification.Chart == "area");
             plot.ConfigureAxes(data.Axes, data.Series.Select(s => s.Selection.Axis).ToArray()); plot.SetLaneMode(Specification.Chart == "lanes");
+            plot.SetStepped(Specification.Chart == "step");
             OverviewTheme.PlotMenu(plot, data.Unit, Specification.Id); content.Children.Insert(2, plot);
         }
         plot.Visibility = Visibility.Visible;

@@ -9,6 +9,7 @@ public sealed class GpuPanelSettings
     public string Sensor { get; set; } = "utilization.gpu";
     public bool Lanes { get; set; }
     public bool Area { get; set; } = true;
+    public bool Stepped { get; set; }
     public double Height { get; set; } = 128;
     public int Minutes { get; set; } = 5;
     public bool Processes { get; set; }
@@ -21,6 +22,8 @@ public sealed class GpuPanelSettings
             catch (Exception error) when (error is FormatException or NullReferenceException) { Sensors = null; }
         }
         if (Lanes && Sensors?.Count > 8) Lanes = false;
+        if (Lanes) Stepped = false;
+        if (Stepped) Area = false;
         if (!Metrics.All.Any(m => m.Key == Sensor)) Sensor = "utilization.gpu";
         Height = double.IsFinite(Height) ? Math.Clamp(Height, 100, 800) : 128;
         if (!new[] { 1, 5, 15, 30 }.Contains(Minutes)) Minutes = 5;
