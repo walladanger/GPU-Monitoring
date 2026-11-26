@@ -22,7 +22,9 @@ public static class EventTimeline
         string Lane(TelemetryEvent e) => e.Source + " · " + (e.Source == "nvidia-processes" ? e.DeviceId ?? e.Id : e.CorrelationId ?? e.DeviceId ?? "Events");
         var lanes = new List<string>();
         var entries = new List<TimelineEntry>();
-        foreach (var group in matching.GroupBy(Lane).Take(24))
+        // Keep the newest bounded activity before chronological row allocation.
+        var bounded = matching.Take(512).ToArray();
+        foreach (var group in bounded.GroupBy(Lane).Take(24))
         {
             int firstRow = lanes.Count;
             var rowEnds = new List<DateTimeOffset>();
@@ -37,9 +39,7 @@ public static class EventTimeline
                 }
                 rowEnds[row] = e.Time;
                 entries.Add(new(e, Start(e), e.Time, firstRow + row));
-                if (entries.Count == 512) break;
             }
-            if (entries.Count == 512) break;
         }
         var ordered = entries.OrderBy(e => e.End).ThenBy(e => e.Event.Source, StringComparer.Ordinal)
             .ThenBy(e => e.Event.Id, StringComparer.Ordinal).ToArray();
