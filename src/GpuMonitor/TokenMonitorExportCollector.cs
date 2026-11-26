@@ -84,5 +84,5 @@ public sealed class TokenMonitorExportCollector(string sourceId, string path) : 
         return WindowsSystemCollector.Batch(devices.AsReadOnly(), samples);
     }
 
-    private sealed class StaleExportException(string message) : FormatException(message);
+    private sealed class StaleExportException(string message) : FormatException(message) { }
 }
