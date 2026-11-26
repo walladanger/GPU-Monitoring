@@ -9,6 +9,7 @@ public sealed class Settings
     public int RefreshSeconds { get; set; } = 2;
     public int WindowMinutes { get; set; } = 5;
     public bool SynchronizeCharts { get; set; } = true;
+    public string? SourceConfigurationPath { get; set; }
     public string AccentColor { get; set; } = "#229DFF";
     public bool MinimizeToTray { get; set; } = true;
     public bool HistoryEnabled { get; set; }
@@ -20,6 +21,7 @@ public sealed class Settings
     public static string HistoryPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GpuMonitor", "history", "telemetry.sqlite");
     public void Normalize()
     {
+        if (SourceConfigurationPath?.Length > 4096) SourceConfigurationPath = null;
         GpuPanels ??= new();
         if (AccentColor == null || !System.Text.RegularExpressions.Regex.IsMatch(AccentColor, "^#[0-9A-Fa-f]{6}$")) AccentColor = "#229DFF";
         GpuPanels = GpuPanels.Where(p => p.Value != null).Take(128).ToDictionary(p => p.Key, p => p.Value);
