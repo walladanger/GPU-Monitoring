@@ -18,6 +18,7 @@ internal sealed class HardwareOverviewCard : Border
     private IReadOnlyList<ProviderSnapshot> sources = [];
     private string? deviceId;
     public TelemetryPlot Plot => plot;
+    internal string? SelectedDeviceId { get => deviceId; set => deviceId = value; }
 
     public HardwareOverviewCard(bool cpu)
     {
