@@ -106,7 +106,14 @@ try {
             $text = Get-Content -LiteralPath $path -Raw
             if (-not $text.StartsWith('PASS:')) { throw $text }
             Add-Result $gate.Flag 'PASS' $text
-        } catch { Add-Result $gate.Flag 'FAIL' $_.Exception.Message }
+        } catch {
+            $detail = $_.Exception.Message
+            if (Test-Path -LiteralPath $path) {
+                $resultText = Get-Content -LiteralPath $path -Raw
+                if ($resultText) { $detail += ": " + $resultText.Trim() }
+            }
+            Add-Result $gate.Flag 'FAIL' $detail
+        }
     }
     $fixtures = Join-Path $appDirectory 'overview-verification'
     if (Test-Path -LiteralPath $fixtures) { Copy-Item -LiteralPath $fixtures -Destination (Join-Path $run 'synthetic-fixture-results') -Recurse }
@@ -139,5 +146,9 @@ finally {
     $lines | Set-Content -LiteralPath $reportPath -Encoding UTF8
     if ($OpenReport) { Start-Process -FilePath notepad.exe -ArgumentList ('"' + $reportPath + '"') }
 }
-if (@($results | Where-Object Status -eq 'FAIL').Count -gt 0) { exit 1 }
+if (@($results | Where-Object Status -eq 'FAIL').Count -gt 0) {
+    Write-Output "Acceptance failures. Full report: $reportPath"
+    Get-Content -LiteralPath $reportPath
+    exit 1
+}
 exit 0

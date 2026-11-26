@@ -20,7 +20,7 @@ internal sealed class SourceSettingsWindow : Window
     private readonly TextBlock live = OverviewTheme.Text("", 12, OverviewTheme.Muted);
     private readonly CheckBox cores = new() { Content = "Collect per-logical-CPU channels", Foreground = Brushes.White, Margin = new(0, 8, 0, 8) };
     private readonly CheckBox processes = new() { Content = "Collect Windows and NVIDIA compute processes", Foreground = Brushes.White, Margin = new(0, 0, 0, 12) };
-    private readonly List<(RuntimeSourceConfiguration Value, CheckBox Enabled, TextBox Endpoint)> runtimes = [];
+    private readonly List<(RuntimeSourceConfiguration Value, CheckBox Enabled, TextBox Endpoint, bool Configured)> runtimes = [];
     private readonly List<(MetadataFeedConfiguration Value, CheckBox Enabled, TextBox Path)> feeds = [];
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private CollectorConfiguration configuration = new();
@@ -39,8 +39,16 @@ internal sealed class SourceSettingsWindow : Window
         actions.Children.Add(OverviewTheme.Command("Use hardware defaults", () => { settings.SourceConfigurationPath = null; saveSettings(); status.Text = "Hardware defaults saved. Optional sources will be disabled on the next launch."; }));
         actions.Children.Add(OverviewTheme.Command("Close", Close));
         root.Children.Add(new ScrollViewer { Content = rows, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        try { if (settings.SourceConfigurationPath is { Length: > 0 } path) configuration = CollectorConfiguration.Load(path); }
-        catch (Exception error) { status.Text = "Saved sources unavailable: " + error.Message; }
+        try
+        {
+            if (settings.SourceConfigurationPath is { Length: > 0 } path)
+            {
+                var candidate = CollectorConfiguration.Load(path);
+                using var validation = BackendProviderSet.Create(candidate);
+                configuration = candidate;
+            }
+        }
+        catch (Exception error) { configuration = new(); status.Text = "Saved sources unavailable; using hardware defaults: " + error.Message; }
         Populate(); timer.Tick += (_, _) => UpdateHealth(); Loaded += (_, _) => { UpdateHealth(); timer.Start(); }; Closed += (_, _) => timer.Stop();
     }
 
@@ -51,6 +59,7 @@ internal sealed class SourceSettingsWindow : Window
         var explanation = OverviewTheme.Text("Optional runtimes and metadata feeds are read only and explicitly enabled here. Save, then restart GPU Monitor to apply. Active charts keep running while you edit. Endpoints are scraped only after restart. Prompts and message bodies are excluded by the adapters.", 13, OverviewTheme.Muted);
         explanation.TextWrapping = TextWrapping.Wrap; rows.Children.Add(explanation);
         cores.IsChecked = configuration.CollectCpuCores; processes.IsChecked = configuration.CollectProcesses; rows.Children.Add(cores); rows.Children.Add(processes);
+        var configuredRuntimeIds = configuration.Runtimes.Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
         var runtimeList = configuration.Runtimes.ToList();
         foreach (var (kind, endpoint) in new[] { ("sglang", RuntimeMetricsCollector.DefaultSglangEndpoint), ("vllm", RuntimeMetricsCollector.DefaultVllmEndpoint), ("llamacpp", RuntimeMetricsCollector.DefaultLlamaCppEndpoint) })
             if (!runtimeList.Any(r => r.Kind == kind)) runtimeList.Add(new() { Id = kind + "-local", Kind = kind, Endpoint = endpoint.AbsoluteUri });
@@ -58,7 +67,7 @@ internal sealed class SourceSettingsWindow : Window
         foreach (var item in runtimeList)
         {
             var enabled = Toggle(item.Kind + " · " + item.Id, item.Enabled); var endpoint = Input(item.Endpoint, item.Kind + " metrics URL");
-            rows.Children.Add(enabled); rows.Children.Add(endpoint); runtimes.Add((item, enabled, endpoint));
+            rows.Children.Add(enabled); rows.Children.Add(endpoint); runtimes.Add((item, enabled, endpoint, configuredRuntimeIds.Contains(item.Id)));
         }
         var feedList = configuration.Feeds.ToList();
         foreach (string kind in new[] { "agui", "usage", "otlp" })
@@ -113,7 +122,7 @@ internal sealed class SourceSettingsWindow : Window
     internal CollectorConfiguration BuildConfiguration()
     {
         var candidate = new CollectorConfiguration { CollectProcesses = processes.IsChecked == true, CollectCpuCores = cores.IsChecked == true,
-            Runtimes = runtimes.Select(r => new RuntimeSourceConfiguration { Enabled = r.Enabled.IsChecked == true, Id = r.Value.Id, Kind = r.Value.Kind, Endpoint = r.Endpoint.Text.Trim(), Metrics = r.Value.Metrics }).ToList(),
+            Runtimes = runtimes.Where(r => r.Configured || r.Enabled.IsChecked == true).Select(r => new RuntimeSourceConfiguration { Enabled = r.Enabled.IsChecked == true, Id = r.Value.Id, Kind = r.Value.Kind, Endpoint = r.Endpoint.Text.Trim(), Metrics = r.Value.Metrics }).ToList(),
             Feeds = feeds.Select(f => new MetadataFeedConfiguration { Enabled = f.Enabled.IsChecked == true, Id = f.Value.Id, Kind = f.Value.Kind, Path = f.Path.Text.Trim() }).Where(f => f.Enabled || f.Path.Length > 0).ToList() };
         return candidate;
     }

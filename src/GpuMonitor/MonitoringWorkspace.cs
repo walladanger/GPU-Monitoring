@@ -15,6 +15,9 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     private WorkspaceLayout? previous;
     private DateTimeOffset time = DateTimeOffset.UtcNow;
     private int minutes = 5;
+    private readonly bool rememberCurrent;
+    private Task currentSave = Task.CompletedTask;
+    private int changes;
     public WorkspaceLayout Layout { get; private set; } = new(1, "Custom workspace", []);
     public int PanelCount => Layout.Panels.Count;
     public IEnumerable<TelemetryPlot> Plots => cards.Values.Select(c => c.Plot).OfType<TelemetryPlot>();
@@ -23,9 +26,10 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     internal System.Windows.Controls.Button PresetsButton { get; }
     internal Func<Point> PointerPosition { get; set; }
 
-    public MonitoringWorkspace(Func<IReadOnlyList<ProviderSnapshot>> sources, string? presetDirectory = null)
+    public MonitoringWorkspace(Func<IReadOnlyList<ProviderSnapshot>> sources, string? presetDirectory = null, bool rememberCurrent = false)
     {
         this.sources = sources;
+        this.rememberCurrent = rememberCurrent;
         PointerPosition = () => Mouse.GetPosition(panels);
         store = new(presetDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GpuMonitor", "workspaces"));
         var heading = new DockPanel { Margin = new(0, 0, 14, 12) };
@@ -35,6 +39,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         DockPanel.SetDock(actions, Dock.Right); heading.Children.Add(actions);
         heading.Children.Add(OverviewTheme.Text("Custom panels", 16)); Children.Add(heading); Children.Add(panels);
         panels.SizeChanged += (_, _) => Reflow();
+        if (rememberCurrent) Loaded += async (_, _) => await RestoreCurrentAsync();
     }
 
     internal void OpenPicker(string initialQuery = "") => Edit(null, initialQuery);
@@ -78,6 +83,8 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         }
         AddButton.IsEnabled = layout.Panels.Count < 64;
         Refresh(sources(), time, minutes); Reflow(); LayoutChanged?.Invoke();
+        changes++;
+        if (rememberCurrent) currentSave = SaveCurrentAfterAsync(currentSave, layout);
     }
 
     internal void Remove(string id) => ApplyLayout(Layout with { Panels = Layout.Panels.Where(p => p.Id != id).ToArray() });
@@ -155,7 +162,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
         var load = new MenuItem { Header = "Load preset" };
         try
         {
-            foreach (var id in store.ListPresets()) load.Items.Add(OverviewTheme.MenuCommand(id, () => { _ = FileAction(() => LoadPresetAsync(id)); }));
+            foreach (var id in PresetNames()) load.Items.Add(OverviewTheme.MenuCommand(id, () => { _ = FileAction(() => LoadPresetAsync(id)); }));
             if (load.Items.Count == 0) load.Items.Add(new MenuItem { Header = "No saved presets", IsEnabled = false });
         }
         catch (Exception error) { load.Items.Add(new MenuItem { Header = "Presets unavailable", ToolTip = error.Message, IsEnabled = false }); }
@@ -176,6 +183,18 @@ internal sealed partial class MonitoringWorkspace : StackPanel
     internal IReadOnlyList<string> PresetNames() => store.ListPresets();
     internal Task SavePresetAsync(string id) { DevelopmentLog.Write("workspace-save", id); return store.SaveAsync(id, Layout); }
     internal async Task LoadPresetAsync(string id) => ApplyLayout(await store.LoadAsync(id));
+    internal async Task RestoreCurrentAsync()
+    {
+        try { if (changes != 0 || !store.HasCurrent()) return; var saved = await store.LoadCurrentAsync(); if (changes == 0) ApplyLayout(saved); }
+        catch (Exception error) { DevelopmentLog.Write("workspace-restore-error", error.ToString()); MessageBox.Show(Window.GetWindow(this), error.Message, "Saved layout could not be restored"); }
+    }
+    private async Task SaveCurrentAfterAsync(Task prior, WorkspaceLayout layout)
+    {
+        await prior;
+        try { await store.SaveCurrentAsync(layout); }
+        catch (Exception error) { DevelopmentLog.Write("workspace-autosave-error", error.ToString()); if (IsLoaded) MessageBox.Show(Window.GetWindow(this), error.Message, "Current layout could not be saved"); }
+    }
+    internal Task FlushAsync() => currentSave;
 }
 
 internal static class WorkspacePresetName

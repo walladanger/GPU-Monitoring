@@ -17,9 +17,18 @@ public sealed class WorkspacePresetStore(string directory)
     private static readonly JsonSerializerOptions Json = new()
     { WriteIndented = true, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, MaxDepth = 16 };
 
-    public async Task SaveAsync(string presetId, WorkspaceLayout layout, CancellationToken cancellation = default)
+    public Task SaveAsync(string presetId, WorkspaceLayout layout, CancellationToken cancellation = default) =>
+        SaveToPathAsync(PresetPath(presetId), layout, cancellation);
+
+    public Task SaveCurrentAsync(WorkspaceLayout layout, CancellationToken cancellation = default) =>
+        SaveToPathAsync(CurrentPath, layout, cancellation);
+
+    public bool HasCurrent() => File.Exists(CurrentPath);
+
+    private string CurrentPath => Path.Combine(root, "current-layout.dat");
+
+    private async Task SaveToPathAsync(string path, WorkspaceLayout layout, CancellationToken cancellation)
     {
-        string path = PresetPath(presetId);
         Validate(layout);
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(layout, Json);
         if (bytes.Length > MaximumBytes) throw new IOException("Workspace preset exceeds 256 KiB.");
@@ -35,9 +44,15 @@ public sealed class WorkspacePresetStore(string directory)
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
-    public async Task<WorkspaceLayout> LoadAsync(string presetId, CancellationToken cancellation = default)
+    public Task<WorkspaceLayout> LoadAsync(string presetId, CancellationToken cancellation = default) =>
+        LoadFromPathAsync(PresetPath(presetId), cancellation);
+
+    public Task<WorkspaceLayout> LoadCurrentAsync(CancellationToken cancellation = default) =>
+        LoadFromPathAsync(CurrentPath, cancellation);
+
+    private async Task<WorkspaceLayout> LoadFromPathAsync(string path, CancellationToken cancellation)
     {
-        await using var file = new FileStream(PresetPath(presetId), FileMode.Open, FileAccess.Read, FileShare.Read,
+        await using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
             4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
         var buffer = new byte[MaximumBytes + 1]; int length = 0, read;
         while (length < buffer.Length && (read = await file.ReadAsync(buffer.AsMemory(length), cancellation)) != 0) length += read;
