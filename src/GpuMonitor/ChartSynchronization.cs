@@ -9,6 +9,8 @@ internal sealed class ChartSynchronization
     private readonly HashSet<TelemetryPlot> plots = [];
     private bool applying;
     public bool Enabled { get; set; } = true;
+    internal event Action<DateTimeOffset?>? CursorChanged;
+    internal event Action<PlotRange?>? RangeChanged;
     internal int Count => plots.Count;
 
     public void Add(TelemetryPlot plot)
@@ -27,14 +29,22 @@ internal sealed class ChartSynchronization
     {
         if (!Enabled || applying) return;
         applying = true;
-        try { foreach (var plot in plots) if (plot != origin) plot.SetCursor(time); }
+        try { foreach (var plot in plots) if (plot != origin) plot.SetCursor(time); CursorChanged?.Invoke(time); }
         finally { applying = false; }
     }
     private void Navigation(TelemetryPlot origin, PlotRange? range)
     {
         if (!Enabled || applying) return;
         applying = true;
-        try { foreach (var plot in plots) if (plot != origin) plot.ApplySynchronizedRange(range); }
+        try { foreach (var plot in plots) if (plot != origin) plot.ApplySynchronizedRange(range); RangeChanged?.Invoke(range); }
+        finally { applying = false; }
+    }
+
+    internal void Inspect(DateTimeOffset? time)
+    {
+        if (!Enabled || applying) return;
+        applying = true;
+        try { foreach (var plot in plots) plot.SetCursor(time); CursorChanged?.Invoke(time); }
         finally { applying = false; }
     }
 
