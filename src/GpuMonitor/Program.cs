@@ -74,6 +74,15 @@ public static class Program
                 if (args.Contains("--legacy-ui") || args.Contains("--verify-ui")) throw new ArgumentException("Configured sources require the Overview dashboard.");
                 configuration = CollectorConfiguration.Load(args[index + 1]);
             }
+            else if (!args.Contains("--legacy-ui") && !args.Contains("--verify-ui") && Settings.Load().SourceConfigurationPath is { Length: > 0 } savedPath)
+            {
+                try { configuration = CollectorConfiguration.Load(savedPath); using var validation = BackendProviderSet.Create(configuration); }
+                catch (Exception error)
+                {
+                    configuration = null;
+                    MessageBox.Show("Saved optional sources could not be loaded. Hardware monitoring will start with its default sources.\n\n" + error.Message, "Optional monitoring sources");
+                }
+            }
         }
         catch (Exception error) { MessageBox.Show(error.Message, "Monitoring configuration could not be loaded"); instance.ReleaseMutex(); Environment.ExitCode = 2; return; }
         Window dashboard;

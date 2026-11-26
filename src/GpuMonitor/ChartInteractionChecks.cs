@@ -140,6 +140,17 @@ internal static class ChartInteractionChecks
                 timeline.SetRange(null); Require(timeline.View.Entries.Count == 0, "Timeline did not resume the latest event snapshot.");
                 File.AppendAllText(Path.Combine(output, "charts-result.txt"), "\nPASS: Cross-chart exact cursors, missing-value inspection, zoom/pan/pause/reset, frozen independent samples, opt-out and subscription cleanup.");
                 File.AppendAllText(Path.Combine(output, "charts-result.txt"), "\nPASS: Native activity timeline span geometry, overlapping range, independent frozen event metadata, shared cursor and reset. Synthetic fixture capture: activity-timeline.png.");
+                var sourceSettings = new SourceSettingsWindow(window, new Settings(), () => sources, () => { });
+                var defaults = sourceSettings.BuildConfiguration();
+                Require(defaults.Runtimes.Count == 3 && defaults.Runtimes.All(s => !s.Enabled) && defaults.Feeds.Count == 0, "Source editor enabled optional adapters without consent.");
+                sourceSettings.VerifyRuntime("vllm", true, "http://127.0.0.1:8000/metrics");
+                using (var enabledSources = BackendProviderSet.Create(sourceSettings.BuildConfiguration()))
+                    Require(enabledSources.Providers.Any(p => p.SourceId == "runtime:vllm-local"), "Source editor did not configure the production vLLM collector.");
+                sourceSettings.VerifyRuntime("vllm", true, "http://user:secret@127.0.0.1:8000/metrics");
+                bool rejected = false;
+                try { using var invalid = BackendProviderSet.Create(sourceSettings.BuildConfiguration()); } catch (ArgumentException) { rejected = true; }
+                Require(rejected, "Source editor accepted embedded credentials."); sourceSettings.Close();
+                File.AppendAllText(Path.Combine(output, "charts-result.txt"), "\nPASS: Source editor defaults, explicit vLLM configuration and credential rejection without polling endpoints.");
                 window.Close(); app.Shutdown();
             }
             catch (Exception error) { Fail(error); }
