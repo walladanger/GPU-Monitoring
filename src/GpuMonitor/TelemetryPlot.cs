@@ -15,6 +15,9 @@ namespace GpuMonitor;
 /// <summary>Native chart view; the owning session retains the source samples.</summary>
 public sealed partial class TelemetryPlot : Grid
 {
+    internal event Action<TelemetryPlot, DateTimeOffset?>? CursorMoved;
+    private ChartSynchronization? synchronization;
+    private DateTimeOffset? inspectionTime;
     private readonly CartesianChart chart;
     internal FrameworkElement VerificationChart => chart;
     private readonly Axis timeAxis;
@@ -77,17 +80,19 @@ public sealed partial class TelemetryPlot : Grid
         foreach (UIElement child in Children) Grid.SetRow(child, 1);
         chart.SizeChanged += (_, _) => { RefreshScales(); RefreshSelectedPoint(); };
         chart.MouseMove += (_, e) => InspectAt(e.GetPosition(chart));
-        chart.MouseLeave += (_, _) => SetCursor(null);
+        chart.MouseLeave += (_, _) => MoveCursor(null);
+        Loaded += (_, _) => { synchronization = ChartSynchronization.For(this); synchronization?.Add(this); };
+        Unloaded += (_, _) => { synchronization?.Remove(this); synchronization = null; };
         WireNavigation();
     }
 
     internal void InspectAt(Point p)
     {
             if (p.X < 4 || p.X > chart.ActualWidth - 4 || p.Y < 8 || p.Y > chart.ActualHeight - 24 ||
-                timeAxis.MinLimit == null || timeAxis.MaxLimit == null) { SetCursor(null); return; }
+                timeAxis.MinLimit == null || timeAxis.MaxLimit == null) { MoveCursor(null); return; }
             // The draw margin and explicit limits are already known before LiveCharts
             // initializes its internal scaler (mouse input can arrive during first render).
-            SetCursor(PlotData.CursorTime((p.X - 4) / (chart.ActualWidth - 8),
+            MoveCursor(PlotData.CursorTime((p.X - 4) / (chart.ActualWidth - 8),
                 DateTimeOffset.FromUnixTimeMilliseconds((long)timeAxis.MinLimit.Value),
                 DateTimeOffset.FromUnixTimeMilliseconds((long)timeAxis.MaxLimit.Value)));
     }
@@ -161,11 +166,18 @@ public sealed partial class TelemetryPlot : Grid
         currentReadings.Text = string.Join("\n", visible.Select((samples, i) => !series[i].IsVisible ? "" : ReadingName(i) + " · " +
             (samples.LastOrDefault()?.Value is double value ? $"{value / SeriesDivisor(i):0.#}{SeriesUnit(i)}" : "Unavailable")).Where(s => s.Length > 0));
         RefreshScales();
-        RefreshViewState(); RefreshSelectedPoint();
+        RefreshViewState(); RefreshSelectedPoint(); SetCursor(inspectionTime);
+    }
+
+    private void MoveCursor(DateTimeOffset? time)
+    {
+        SetCursor(time);
+        CursorMoved?.Invoke(this, selectedPoint?.Sample.Time ?? time);
     }
 
     public void SetCursor(DateTimeOffset? time)
     {
+        inspectionTime = time;
         if (selectedPoint != null) { RefreshSelectedPoint(); return; }
         inspection.Text = ""; detailPanel.Visibility = Visibility.Collapsed; cursor.Visibility = Visibility.Collapsed;
         if (time == null || timeAxis.MinLimit == null || timeAxis.MaxLimit == null) return;
