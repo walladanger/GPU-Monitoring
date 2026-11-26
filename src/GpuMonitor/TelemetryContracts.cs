@@ -84,6 +84,7 @@ public sealed class TelemetrySeriesBuffer
     private int head;
     private int count;
     private DateTimeOffset? lastAcceptedTime;
+    private DateTimeOffset? expirationCutoff;
     private (string Source, string Device, string Metric)? identity;
     public int Count => count;
 
@@ -100,6 +101,7 @@ public sealed class TelemetrySeriesBuffer
     {
         var key = (sample.Device.Source, sample.Device.Id, sample.MetricKey);
         if (identity.HasValue && identity.Value != key) throw new ArgumentException("Buffer belongs to a different series.", nameof(sample));
+        if (expirationCutoff.HasValue && sample.Time < expirationCutoff.Value) return false;
         if (lastAcceptedTime.HasValue && sample.Time <= lastAcceptedTime.Value) return false;
         identity = key;
         lastAcceptedTime = sample.Time;
@@ -113,7 +115,9 @@ public sealed class TelemetrySeriesBuffer
     /// <summary>Also expires samples when collection stops. Does not synthesize zeroes.</summary>
     public void Prune(DateTimeOffset now)
     {
-        while (count > 0 && now - items[head]!.Time > retention) RemoveOldest();
+        var cutoff = now - retention;
+        if (!expirationCutoff.HasValue || cutoff > expirationCutoff.Value) expirationCutoff = cutoff;
+        while (count > 0 && items[head]!.Time < expirationCutoff.Value) RemoveOldest();
     }
 
     public IReadOnlyList<TelemetrySample> Snapshot() =>
