@@ -19,7 +19,7 @@ public static class EventTimeline
             .DistinctBy(e => (e.Source, e.Id, e.Kind)).OrderByDescending(e => e.Time).ToArray();
         // Group trace spans by correlation and uncorrelated processes by stable
         // identity. Never merge equal PIDs from unrelated provider lifetimes.
-        string Lane(TelemetryEvent e) => e.Source + " · " + (e.CorrelationId ?? e.DeviceId ?? "Events");
+        string Lane(TelemetryEvent e) => e.Source + " · " + (e.Source == "nvidia-processes" ? e.DeviceId ?? e.Id : e.CorrelationId ?? e.DeviceId ?? "Events");
         var lanes = matching.Select(Lane).Distinct().Take(24).ToArray();
         var indices = lanes.Select((name, index) => (name, index)).ToDictionary(p => p.name, p => p.index);
         var entries = matching.Where(e => indices.ContainsKey(Lane(e))).Take(512)
