@@ -69,6 +69,7 @@ internal sealed partial class MonitoringWorkspace : StackPanel
             entry.Value.Window.Content = new ScrollViewer
             { Content = replacement, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new(14) };
             entry.Value.Window.Title = updated.Title + " · GPU Monitor";
+            replacement.FitDetached(entry.Value.Window.ActualWidth, entry.Value.Window.ActualHeight);
             popouts[entry.Key] = (entry.Value.Window, replacement);
         }
         panels.Children.Clear(); cards.Clear();
