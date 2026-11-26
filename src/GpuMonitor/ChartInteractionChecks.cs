@@ -142,7 +142,7 @@ internal static class ChartInteractionChecks
                 File.AppendAllText(Path.Combine(output, "charts-result.txt"), "\nPASS: Native activity timeline span geometry, overlapping range, independent frozen event metadata, shared cursor and reset. Synthetic fixture capture: activity-timeline.png.");
                 var sourceSettings = new SourceSettingsWindow(window, new Settings(), () => sources, () => { });
                 var defaults = sourceSettings.BuildConfiguration();
-                Require(defaults.Runtimes.Count == 3 && defaults.Runtimes.All(s => !s.Enabled) && defaults.Feeds.Count == 0, "Source editor enabled optional adapters without consent.");
+                Require(defaults.Runtimes.Count == 0 && defaults.Feeds.Count == 0, "Source editor persisted optional adapters without consent.");
                 sourceSettings.VerifyRuntime("vllm", true, "http://127.0.0.1:8000/metrics");
                 using (var enabledSources = BackendProviderSet.Create(sourceSettings.BuildConfiguration()))
                     Require(enabledSources.Providers.Any(p => p.SourceId == "runtime:vllm-local"), "Source editor did not configure the production vLLM collector.");
