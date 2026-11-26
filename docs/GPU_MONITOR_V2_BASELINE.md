@@ -33,7 +33,7 @@ From the repository root with .NET 10 SDK:
 
 ```text
 dotnet run --project tests/GpuMonitor.TelemetryChecks -c Release
-dotnet build src/GpuMonitor/GpuMonitor.csproj -c Release
+dotnet build src/GpuMonitor/GpuMonitor.csproj -c Release -p:EnableWindowsTargeting=true
 ```
 
 The first command compiles the production `Telemetry.cs` directly into a portable
