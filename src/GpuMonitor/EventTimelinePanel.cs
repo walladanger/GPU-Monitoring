@@ -45,7 +45,8 @@ internal sealed class EventTimelinePanel : Border
     {
         now = time; minutes = windowMinutes; events = snapshots.SelectMany(s => s.EventHistory).ToArray();
         string selected = source.SelectedItem as string ?? "All sources";
-        var names = new[] { "All sources" }.Concat(snapshots.Where(s => s.EventHistory.Count > 0).Select(s => s.Source)).Distinct().ToArray();
+        var visibleEvents = frozen ?? events;
+        var names = new[] { "All sources" }.Concat(visibleEvents.Select(e => e.Source)).Distinct().ToArray();
         if (!source.Items.Cast<string>().SequenceEqual(names))
         { changingSource = true; source.ItemsSource = names; source.SelectedItem = names.Contains(selected) ? selected : names[0]; changingSource = false; }
         Render();
