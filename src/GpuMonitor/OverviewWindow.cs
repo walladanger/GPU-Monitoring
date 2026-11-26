@@ -317,7 +317,23 @@ public sealed partial class OverviewWindow : Window
         {
             var item = OverviewTheme.MenuCommand(area ? "Area" : "Line", () =>
             {
+                Dictionary<string, bool> Capture(TelemetryPlot target)
+                {
+                    var result = new Dictionary<string, bool>();
+                    for (int i = 0; i < Math.Min(target.SeriesCount, comparisonIds.Length); i++)
+                        result[comparisonIds[i]] = target.IsSeriesVisible(i);
+                    return result;
+                }
+                void Restore(TelemetryPlot target, Dictionary<string, bool> visibility)
+                {
+                    for (int i = 0; i < Math.Min(target.SeriesCount, comparisonIds.Length); i++)
+                        target.ShowSeries(i, !visibility.TryGetValue(comparisonIds[i], out bool shown) || shown);
+                }
+                var mainVisibility = Capture(comparison);
+                var detachedVisibility = comparisonPopout is { } detached ? Capture(detached.Plot) : new Dictionary<string, bool>();
                 comparisonAsArea = area; comparisonIds = []; Render(viewTime);
+                Restore(comparison, mainVisibility);
+                if (comparisonPopout is { } updated) Restore(updated.Plot, detachedVisibility);
             });
             item.IsCheckable = true; item.IsChecked = comparisonAsArea == area; chartMode.Items.Add(item);
         }
@@ -377,7 +393,8 @@ public sealed partial class OverviewWindow : Window
     private void OpenHardwareWindow(bool cpu)
     {
         if (hardwarePopouts.TryGetValue(cpu, out var current)) { current.Window.Activate(); return; }
-        var card = new HardwareOverviewCard(cpu);
+        var card = new HardwareOverviewCard(cpu)
+        { SelectedDeviceId = (cpu ? cpuCard : diskCard).SelectedDeviceId };
         var window = new Window
         {
             Owner = this, Title = (cpu ? "CPU" : "Disk") + " · GPU Monitor",
