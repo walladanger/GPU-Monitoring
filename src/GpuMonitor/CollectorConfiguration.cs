@@ -74,6 +74,7 @@ public sealed class BackendProviderSet : IDisposable
                 if (!System.IO.Path.IsPathFullyQualified(feed.Path) || feed.Path.StartsWith(@"\\", StringComparison.Ordinal))
                     throw new FormatException("Metadata feeds must use explicit local absolute paths.");
                 string id = feed.Kind + ":" + feed.Id;
+                if (feed.Kind == "tokenmonitor") { result.providers.Add(new TokenMonitorExportCollector(id, feed.Path)); continue; }
                 IMetadataDecoder decoder = feed.Kind switch
                 { "agui" => new AgentEventDecoder(id), "usage" => new UsageMetadataDecoder(id), "otlp" => new OtlpMetadataDecoder(id), _ => throw new FormatException("Unknown metadata feed kind.") };
                 result.providers.Add(new JsonlTelemetryProvider(id, feed.Path, decoder));
