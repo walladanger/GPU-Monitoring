@@ -27,7 +27,7 @@ internal sealed class TrayQuickWindow : Window
         Background = Brushes.Transparent; Foreground = Brushes.White; FontFamily = new("Segoe UI");
         WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 0, ResizeBorderThickness = new(0), GlassFrameThickness = new(-1), CornerRadius = new(10) });
         var content = new StackPanel { Margin = new(15) };
-        var heading = new DockPanel(); var close = OverviewTheme.Command("×", Hide, "Dismiss quick-view"); close.Padding = new(7, 1, 7, 1); DockPanel.SetDock(close, Dock.Right); heading.Children.Add(close);
+        var heading = new DockPanel(); var close = OverviewTheme.Command("× Close", Hide, "Dismiss quick-view"); close.Padding = new(7, 1, 7, 1); DockPanel.SetDock(close, Dock.Right); heading.Children.Add(close);
         heading.Children.Add(OverviewTheme.Text("GPU Monitor · Quick view", 16)); content.Children.Add(heading);
         scroll = new ScrollViewer { Content = rows, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 500, Margin = new(0, 10, 0, 8) }; content.Children.Add(scroll);
         footer.TextWrapping = TextWrapping.Wrap; footer.MaxHeight = 34; footer.TextTrimming = TextTrimming.CharacterEllipsis; content.Children.Add(footer);

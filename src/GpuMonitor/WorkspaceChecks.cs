@@ -42,7 +42,7 @@ internal static class WorkspaceChecks
                             int pixel = y * stride + x * 4;
                             if (pixels[pixel + 1] > 140 && pixels[pixel + 1] > pixels[pixel] * 1.5 && pixels[pixel + 1] > pixels[pixel + 2] * 1.5) colored++;
                         }
-                    if (colored < 20) throw new InvalidOperationException("Custom chart native trace was not rendered in its panel.");
+                    if (colored < 20) throw new InvalidOperationException($"Custom chart native trace was not rendered in its panel: origin={point}; size={plot.RenderSize}; colored={colored}.");
                 }
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
                 using (var stream = File.Create(Path.Combine(output, "workspace-controls-1536.png"))) encoder.Save(stream);
@@ -188,6 +188,7 @@ internal static class WorkspaceChecks
                     workspace.Plots.SelectMany(p => p.VisibleSamples).Any(s => s.Device.Kind == DeviceKind.Gpu))
                     throw new InvalidOperationException("Missing hardware was remapped or a trace was fabricated.");
                 window.SetWorkspaceFixtures(sources, now); window.VerifyInventory(2);
+                viewport.UpdateLayout(); window.VerifyWorkspace.BringIntoView();
                 capture.Start();
             }
             catch (Exception error) { Fail(error); }
