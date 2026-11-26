@@ -17,6 +17,7 @@ public sealed class TokenMonitorExportCollector(string sourceId, string path) : 
         new(sourceId, "tokenmonitor.total", "Exported token total", "tokens"),
         new(sourceId, "tokenmonitor.rate", "Export-interval token rate (all time only)", "tokens/s")];
     private readonly Dictionary<string, (DateTimeOffset Time, double Total)> previous = [];
+    private DateTimeOffset? latestAcceptedSnapshot;
 
     public async Task<TelemetryBatch> ReadAsync(CancellationToken cancellation)
     {
@@ -34,6 +35,7 @@ public sealed class TokenMonitorExportCollector(string sourceId, string path) : 
             using var document = JsonDocument.Parse(memory.ToArray(), new JsonDocumentOptions { MaxDepth = 32 });
             return Normalize(document.RootElement);
         }
+        catch (StaleExportException) { throw; }
         catch { previous.Clear(); throw; }
     }
 
@@ -44,6 +46,7 @@ public sealed class TokenMonitorExportCollector(string sourceId, string path) : 
         bool offset = generated != null && (generated.EndsWith('Z') || generated.Length >= 6 && generated[^3] == ':' && generated[^6] is '+' or '-');
         if (!offset || !DateTimeOffset.TryParse(generated, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var time))
             throw new FormatException("Token Monitor export needs a generatedAt timestamp with offset.");
+        if (latestAcceptedSnapshot is { } latest && time < latest) throw new StaleExportException("Ignoring an older Token Monitor export snapshot.");
         var snapshot = root.GetProperty("snapshot");
         var devices = new List<DeviceIdentity>(); var samples = new List<TelemetrySample>();
         var next = new Dictionary<string, (DateTimeOffset Time, double Total)>();
@@ -77,6 +80,9 @@ public sealed class TokenMonitorExportCollector(string sourceId, string path) : 
         }
         if (devices.Count == 0) throw new FormatException("Token Monitor export has no tool/model totals.");
         previous.Clear(); foreach (var pair in next) previous.Add(pair.Key, pair.Value);
+        latestAcceptedSnapshot = time;
         return WindowsSystemCollector.Batch(devices.AsReadOnly(), samples);
     }
+
+    private sealed class StaleExportException(string message) : FormatException(message);
 }
