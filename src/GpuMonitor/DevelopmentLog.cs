@@ -29,7 +29,7 @@ internal static class DevelopmentLog
                 if (message.Length > 16384) message = message[..16384] + " [truncated]";
                 File.AppendAllText(Path, $"{DateTimeOffset.Now:O} [{category}] {message}{Environment.NewLine}");
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException) { Debug.WriteLine("Development log unavailable: " + error.Message); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException) { }
         }
     }
     private sealed class LogListener : TraceListener
