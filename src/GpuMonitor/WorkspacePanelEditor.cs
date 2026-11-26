@@ -89,6 +89,7 @@ internal sealed class WorkspacePanelEditor : Window
         {
             if (series.Length is < 1 or > 16) throw new FormatException("Select between 1 and 16 sensors.");
             if (candidate.Title.Length == 0) throw new FormatException("Enter a panel title.");
+            if (candidate.Chart == "lanes" && series.Length > 8) throw new FormatException("Stacked lanes support at most 8 sensors.");
             WorkspacePresetStore.Validate(new(1, "Editor", [candidate]));
             candidate = candidate with { Series = WorkspaceMetrics.AssignAxes(selectedChoices, original.Series) };
             Result = candidate; return true;
